@@ -28,8 +28,9 @@ export class SendPB extends BaseAction<Payload, PBData> {
       }
     }
     catch (e) {
-      this.ctx.logger.error('pmhq 发包失败', e)
-      throw new Error(`pmhq 发包失败: ${e}`, { cause: e })
+      // 直连和 PMHQ 两种模式共用这个 action, 文案不能写死 pmhq (直连模式根本不经过 pmhq).
+      this.ctx.logger.error('send_pb 发包失败', e)
+      throw new Error(`send_pb 发包失败: ${e}`, { cause: e })
     }
   }
 }
