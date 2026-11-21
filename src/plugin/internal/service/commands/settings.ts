@@ -6,6 +6,7 @@ import { normalizePlatformId } from '../../../../common/platform'
 export const CommandsSchema: Schema<CommandSettings> = Schema.object({
   prefixes: Schema.array(Schema.string()).default(DEFAULT_SETTINGS.prefixes).description('指令前缀：消息以其中一个开头就算指令'),
   bare: Schema.boolean().default(DEFAULT_SETTINGS.bare).description('不写前缀也算指令'),
+  denyNotice: Schema.boolean().default(true).description('没有权限的人使用指令时，回复“你没有权限使用这个指令。”；关闭后不回复'),
   owners: Schema.array(Schema.string()).default([])
     .description('主人：能用所有指令的人。NTQQ 填 QQ 号，QQ 官方机器人填用户的 openid；选择所有平台时按用户 id 匹配'),
   permissions: Schema.array(Schema.object({

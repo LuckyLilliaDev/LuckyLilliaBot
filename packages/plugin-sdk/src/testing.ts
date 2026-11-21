@@ -44,6 +44,8 @@ export interface TestBot extends Bot {
 export interface TestCommandSettings {
   prefixes: string[]
   bare: boolean
+  /** Reply to someone who may not run a command; false drops the command silently */
+  denyNotice?: boolean
   /** `platform:userId`, or a user id on every platform */
   owners: string[]
   /** Extra aliases for one plugin entry's command; owner is empty in this test app. */

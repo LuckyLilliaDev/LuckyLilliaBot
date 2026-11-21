@@ -12,6 +12,8 @@ export interface CommandSettings {
   prefixes: string[]
   /** A command may go without a prefix too */
   bare: boolean
+  /** Tell someone who may not run a command so; off, the command is dropped without a reply */
+  denyNotice?: boolean
   /** `platform:userId`, or a user id on every platform: they may run every command. */
   owners: string[]
   /** Permission overrides for one plugin entry's command; aliases share the canonical command's permission. */
@@ -20,7 +22,7 @@ export interface CommandSettings {
   aliases?: { owner: string; command: string; aliases: string[] }[]
 }
 
-export const DEFAULT_SETTINGS: CommandSettings = { prefixes: ['/'], bare: true, owners: [], aliases: [], permissions: [] }
+export const DEFAULT_SETTINGS: CommandSettings = { prefixes: ['/'], bare: true, denyNotice: true, owners: [], aliases: [], permissions: [] }
 
 interface Declaration {
   name: string
@@ -312,7 +314,8 @@ export class CommandService extends Service implements Commands {
     if (!found) return next()
     const { command, rest } = found
     if (!await this.permitted(command, session)) {
-      await session.send(h.text('你没有权限使用这个指令。'))
+      // Silent or not, the command is still taken: later middleware never sees a command it was not meant for
+      if (this.settings.current.denyNotice !== false) await session.send(h.text('你没有权限使用这个指令。'))
       return
     }
     const cooldown = command.config.cooldown

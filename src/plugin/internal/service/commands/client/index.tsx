@@ -23,6 +23,7 @@ interface CommandInfo {
 interface CommandsConfig {
   prefixes: string[]
   bare: boolean
+  denyNotice?: boolean
   owners: string[]
   permissions?: { owner: string; command: string; authority: CommandInfo['authority'] }[]
   aliases?: { owner: string; command: string; aliases: string[] }[]
@@ -221,7 +222,7 @@ const CommandTable: React.FC<{ config: PluginConfigState<CommandsConfig> }> = ({
 }
 
 const CommandsSettings = () => (
-  <SchemaSettings fields={['prefixes', 'bare']}>
+  <SchemaSettings fields={['prefixes', 'bare', 'denyNotice']}>
     {(config: PluginConfigState<CommandsConfig>) => (
       <div className="space-y-6">
         <OwnerEditor

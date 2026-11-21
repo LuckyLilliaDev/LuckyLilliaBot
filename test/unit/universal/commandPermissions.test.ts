@@ -29,6 +29,30 @@ describe('central command permissions', () => {
     expect(app.ctx.commands.list()[0].authority).toBe('everyone')
   })
 
+  it('drops a denied command without a reply when the notice is off, still keeping it from later middleware', async () => {
+    app.ctx.command('login').action(() => 'ready')
+    let reached = 0
+    app.ctx.on('bot/message', async (_, next) => { reached++; return next() })
+    app.commands.permissions = [{ owner: '', command: 'login', authority: 'owner' }]
+    app.commands.owners = ['test:allowed']
+    const bot = app.bot()
+    expect(await bot.receive('login')).toEqual(['你没有权限使用这个指令。'])
+
+    app.commands.denyNotice = false
+    expect(await bot.receive('login')).toEqual([])
+    expect(await bot.receive('login', { userId: 'allowed' })).toEqual(['ready'])
+    expect(reached).toBe(0)
+    expect(await bot.receive('hello')).toEqual([])
+    expect(reached).toBe(1)
+  })
+
+  it('shows the denial notice by default and keeps an older config without the switch replying', () => {
+    expect(CommandsSchema({}).denyNotice).toBe(true)
+    const stored = CommandsSchema(commandsSettings.normalize!({ prefixes: ['/'], bare: true, owners: [] } as never))
+    expect(stored.denyNotice).toBe(true)
+    expect(CommandsSchema({ denyNotice: false }).denyNotice).toBe(false)
+  })
+
   it('uses group roles and the central owner list for an admin override', async () => {
     app.ctx.command('login').action(() => 'ready')
     app.commands.permissions = [{ owner: '', command: 'login', authority: 'admin' }]
