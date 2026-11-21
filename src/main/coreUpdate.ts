@@ -10,6 +10,7 @@ import { version as runningVersion } from '../version'
 import { canRestart, requestRestart } from './hostLifecycle'
 import { currentInstance } from '@/common/instance'
 import { runningInstances } from './instanceLock'
+import { FAILED_RUNTIME_DIR_NAME, inContainer, RELEASE_NAMES, runtimeDir, RUNTIME_DIR_NAME, selfUpdateDisabled } from './runtime'
 import { isExactVersion, matches, Registries, RegistryError, type PackageVersion, type RegistryClient } from '../plugin/internal/tool/market/registry'
 import { MarketSchema, registriesOf, type MarketSettings } from '../plugin/internal/tool/market/settings'
 import { extractPackage } from '../plugin/internal/tool/market/tar'
@@ -18,8 +19,6 @@ const gunzipAsync = promisify(gunzip)
 
 /** The npm package releases of the bot itself are published as */
 export const CORE_PACKAGE = '@luckylillia-dev/luckylillia'
-/** What the package.json of an installation may be called: that package, or the name releases had before it */
-const INSTALL_NAMES = [CORE_PACKAGE, 'llonebot-dist']
 /** Inside the installation: staged downloads and the files the last update replaced */
 export const WORK_DIR = '.llbot-update'
 /** Never replaced, whatever a package carries: the user's data, and this updater's own work */
@@ -61,12 +60,20 @@ export interface CoreUpdaterOptions {
   /** Before restarting, so the answer to the update request reaches the browser */
   restartDelay?: number
   nodeVersion?: string
+  /** In a container the release goes to the data volume (runtime.ts) instead of replacing the program's files */
+  container?: boolean
+  /** Where data/ is, the working directory by default */
+  cwd?: string
 }
 
 /**
  * Updates the installation the bot runs from to the newest release on npm, then restarts into it. Only the
  * entries the package carries are replaced, each moved aside into a backup first and all moved back if one fails;
  * data/ and anything else the package does not carry (a bundled node.exe, logs) stay as they are.
+ *
+ * In a container the program's files belong to the image and are lost when the container is recreated: there the
+ * whole release goes to data/llbot-runtime/ on the data volume, which the supervisor of the image starts instead
+ * of its own while it is newer. No backup is kept there: the image's own version is the one to fall back to.
  */
 export class CoreUpdater {
   private state: CoreUpdateStatus['state'] = 'idle'
@@ -121,8 +128,11 @@ export class CoreUpdater {
     if (!isExactVersion(version)) throw new CoreUpdateError('要填写完整的版本号')
     this.state = 'checking'
     this.error = undefined
+    const container = this.options.container ?? inContainer()
+    const runtime = runtimeDir(this.options.cwd)
     const work = path.join(this.options.installDir, WORK_DIR)
-    const staged = path.join(work, `staging-${version}`)
+    // Staged next to where it goes, so moving it into place is a rename on the same filesystem
+    const staged = container ? `${runtime}.staging-${version}` : path.join(work, `staging-${version}`)
     try {
       this.blocked = await this.options.blocker?.()
       if (this.blocked) throw new CoreUpdateError(this.blocked, 409)
@@ -147,12 +157,17 @@ export class CoreUpdater {
       await rm(staged, { recursive: true, force: true })
       await extractPackage(tar, staged)
       await checkStaged(staged, version)
-      const backup = path.join(work, `backup-${this.current}`)
-      await rm(backup, { recursive: true, force: true })
-      await mkdir(backup, { recursive: true })
-      await replaceInstall(this.options.installDir, staged, backup)
-      await rm(staged, { recursive: true, force: true })
-      this.options.log?.info(`已更新到 ${version}，旧版本的文件在 ${backup}；正在重启`)
+      if (container) {
+        await replaceRuntime(staged, runtime)
+        this.options.log?.info(`已把 ${version} 安装到数据卷中的 ${runtime}；正在重启`)
+      } else {
+        const backup = path.join(work, `backup-${this.current}`)
+        await rm(backup, { recursive: true, force: true })
+        await mkdir(backup, { recursive: true })
+        await replaceInstall(this.options.installDir, staged, backup)
+        await rm(staged, { recursive: true, force: true })
+        this.options.log?.info(`已更新到 ${version}，旧版本的文件在 ${backup}；正在重启`)
+      }
       this.state = 'restarting'
       setTimeout(() => {
         if (this.options.restart?.() ?? requestRestart()) return
@@ -171,6 +186,12 @@ export class CoreUpdater {
 
   /** Leftovers of interrupted updates, and backups but the newest */
   async cleanup(): Promise<void> {
+    const runtime = runtimeDir(this.options.cwd)
+    for (const name of await readdir(path.dirname(runtime)).catch(() => [] as string[])) {
+      if (name.startsWith(`${RUNTIME_DIR_NAME}.staging-`) || name === `${RUNTIME_DIR_NAME}.old`) {
+        await rm(path.join(path.dirname(runtime), name), { recursive: true, force: true })
+      }
+    }
     const work = path.join(this.options.installDir, WORK_DIR)
     let names: string[]
     try {
@@ -214,12 +235,31 @@ async function checkStaged(staged: string, version: string): Promise<void> {
   } catch {
     throw new CoreUpdateError('更新包里没有有效的 package.json', 502)
   }
-  if (!INSTALL_NAMES.includes(manifest.name as string) || manifest.version !== version) {
+  if (!RELEASE_NAMES.includes(manifest.name as string) || manifest.version !== version) {
     throw new CoreUpdateError('更新包的包名或版本与请求的不符', 502)
   }
   for (const file of ['llbot.js', 'llbot-core.js']) {
     if (!existsSync(path.join(staged, file))) throw new CoreUpdateError(`更新包里缺少 ${file}`, 502)
   }
+}
+
+/**
+ * Moves a staged release into place as the data volume's runtime: the current one aside, the staged one in, the
+ * current one back if that fails. A release set aside after failing to start is moot then.
+ */
+export async function replaceRuntime(staged: string, target: string): Promise<void> {
+  const old = `${target}.old`
+  await rm(old, { recursive: true, force: true })
+  const had = await exists(target)
+  if (had) await rename(target, old)
+  try {
+    await rename(staged, target)
+  } catch (error) {
+    if (had) await rename(old, target).catch(() => {})
+    throw new CoreUpdateError(`安装到 ${target} 失败：${(error as Error).message}`, 409)
+  }
+  await rm(old, { recursive: true, force: true }).catch(() => {})
+  await rm(path.join(path.dirname(target), FAILED_RUNTIME_DIR_NAME), { recursive: true, force: true }).catch(() => {})
 }
 
 export interface RenameOps {
@@ -278,10 +318,10 @@ export async function updateBlocker(installDir: string): Promise<string | undefi
   } catch {
     // The source tree has none next to the entry
   }
-  if (!INSTALL_NAMES.includes(name as string) || !existsSync(path.join(installDir, 'llbot-core.js'))) {
+  if (!RELEASE_NAMES.includes(name as string) || !existsSync(path.join(installDir, 'llbot-core.js'))) {
     return '从源码运行时不能自动更新'
   }
-  if (existsSync('/.dockerenv') || existsSync('/run/.containerenv')) return '在容器中运行时请更新镜像，不能自动更新'
+  if (selfUpdateDisabled()) return '已用环境变量 LLBOT_SELF_UPDATE=0 关闭自动更新'
   if (!canRestart()) return '以 --no-supervisor 启动时不能自动更新'
   const others = await runningInstances(currentInstance().name)
   if (others.length) return `实例 ${others.join('、')} 也在用这份程序运行，请先停止它们再更新`

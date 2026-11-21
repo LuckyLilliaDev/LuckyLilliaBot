@@ -11,11 +11,12 @@ const work = mkdtempSync(path.join(tmpdir(), 'llbot-supervisor-'))
 afterAll(() => rmSync(work, { recursive: true, force: true }))
 
 /** Runs supervise() in a real process around a stand-in bot, and resolves to what came out of it. */
-function run(core: string, args: string[], options: { maxRestarts?: number; onStart?: (pid: number) => void } = {}) {
+function run(core: string, args: string[], options: { maxRestarts?: number; onStart?: (pid: number) => void; supervise?: string } = {}) {
   const harness = path.join(work, `harness-${Math.random().toString(36).slice(2)}.mts`)
   writeFileSync(harness, `
     import { supervise } from ${JSON.stringify(pathToFileURL(path.join(repository, 'src/main/supervisor.ts')).href)}
-    supervise({ core: process.env.CORE, args: process.argv.slice(2), execArgv: [], maxRestarts: ${options.maxRestarts ?? 5}, log: m => console.log('[supervisor] ' + m) })
+    supervise({ core: process.env.CORE, args: process.argv.slice(2), execArgv: [], maxRestarts: ${options.maxRestarts ?? 5},
+      log: m => console.log('[supervisor] ' + m), ${options.supervise ?? ''} })
   `)
   return new Promise<{ code: number | null; output: string; pid: number }>((resolve) => {
     const child = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), harness, ...args], {
@@ -59,7 +60,7 @@ describe('the supervisor', () => {
       expect(line).toContain(`ppid=${result.pid}`)
       expect(line).toContain('supervised=1')
     }
-    expect(result.output).toContain('[supervisor] restarting the bot')
+    expect(result.output).toContain('[supervisor] 正在重启 Bot')
   }, 30_000)
 
   it('gives up on a bot that keeps asking for restarts', async () => {
@@ -67,7 +68,7 @@ describe('the supervisor', () => {
     const result = await run(core, [], { maxRestarts: 2 })
     expect(result.code).toBe(1)
     expect(result.output.split(/\r?\n/).filter(line => line.startsWith('run '))).toHaveLength(3)
-    expect(result.output).toContain('giving up')
+    expect(result.output).toContain('不再重启')
   }, 30_000)
 
   it('exits when the process given as --parent-pid is gone, leaving the bot to stop on its own', async () => {
@@ -75,6 +76,29 @@ describe('the supervisor', () => {
     // A pid that is not running: the supervisor notices within a second
     const result = await run(core, ['--parent-pid=999999999'])
     expect(result.code).toBe(0)
+  }, 30_000)
+
+  it('sets a data-volume release aside after three failed starts and starts the image version', async () => {
+    const runtime = bot('runtime-broken.mjs', 'process.exit(1)')
+    const image = bot('image.mjs', "console.log('image version'); process.exit(4)")
+    const result = await run(runtime, [], { supervise: `
+      choose: () => globalThis.failed ? { core: ${JSON.stringify(image)} } : { core: process.env.CORE, runtime: { version: '9.0.1' } },
+      onRuntimeFailed: () => { globalThis.failed = true; return 'data/llbot-runtime.failed' },
+    ` })
+    expect(result.code).toBe(4)
+    expect(result.output.split(/\r?\n/).filter(line => line.startsWith('run '))).toHaveLength(4)
+    expect(result.output).toContain('image version')
+    expect(result.output).toContain('自动更新安装的 9.0.1 连续 3 次启动失败，已移到 data/llbot-runtime.failed')
+  }, 30_000)
+
+  it('takes a data-volume release that stops normally for a stop, not a failed start', async () => {
+    const runtime = bot('runtime-stops.mjs', 'process.exit(0)')
+    const result = await run(runtime, [], { supervise: `
+      choose: () => ({ core: process.env.CORE, runtime: { version: '9.0.1' } }),
+      onRuntimeFailed: () => { throw new Error('must not be called') },
+    ` })
+    expect(result.code).toBe(0)
+    expect(result.output.split(/\r?\n/).filter(line => line.startsWith('run '))).toHaveLength(1)
   }, 30_000)
 
   it.skipIf(process.platform === 'win32')('passes SIGTERM on to the bot once and exits with its code', async () => {

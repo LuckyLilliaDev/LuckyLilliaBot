@@ -114,7 +114,7 @@ try {
     && existsSync(path.join(instance, 'webui_token.txt')))
   expect('file outside the package kept', existsSync(path.join(installed, 'node.exe.marker')))
   expect('old version backed up', existsSync(path.join(installed, '.llbot-update', 'backup-9.0.0', 'llbot-core.js')))
-  const restarted = readFileSync(path.join(work, 'bot.log'), 'utf8').includes('[supervisor] restarting the bot')
+  const restarted = readFileSync(path.join(work, 'bot.log'), 'utf8').includes('[supervisor] 正在重启 Bot')
   expect('the supervisor logged the restart', restarted)
 } catch (error) {
   failed = true

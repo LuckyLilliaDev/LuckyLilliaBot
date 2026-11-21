@@ -35,6 +35,8 @@ RUN set -eux; \
     echo "Asia/Shanghai" > /etc/timezone
 
 ENV TZ=Asia/Shanghai
+# The bot installs its own updates into the data volume when it knows it runs in a container (src/main/runtime.ts)
+ENV LLBOT_CONTAINER=1
 
 WORKDIR /app/llbot
 

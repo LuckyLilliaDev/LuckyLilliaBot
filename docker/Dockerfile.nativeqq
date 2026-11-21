@@ -9,6 +9,8 @@ COPY dist/ .
 COPY docker/startup.sh /startup.sh
 RUN chmod +x /startup.sh
 ENV PROTOCOL_MODE=nativeqq
+# The bot installs its own updates into the data volume when it knows it runs in a container (src/main/runtime.ts)
+ENV LLBOT_CONTAINER=1
 VOLUME ["/app/llbot/data", "/root/.config/QQ"]
 ENTRYPOINT ["/startup.sh"]
 CMD []

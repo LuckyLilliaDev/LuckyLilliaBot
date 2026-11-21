@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CORE_PACKAGE, CoreUpdater, createCoreUpdateRoutes, replaceInstall, WORK_DIR } from '@/main/coreUpdate'
+import { CORE_PACKAGE, CoreUpdater, createCoreUpdateRoutes, replaceInstall, updateBlocker, WORK_DIR } from '@/main/coreUpdate'
+import { failedRuntimeDir, runtimeDir } from '@/main/runtime'
 import { RegistryError, type PackageVersion, type Packument, type RegistryClient } from '@/plugin/internal/tool/market/registry'
 
 type Files = Record<string, string>
@@ -94,13 +95,14 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   rmSync(installDir, { recursive: true, force: true })
 })
 
 function updater(registry: RegistryClient, options: Partial<ConstructorParameters<typeof CoreUpdater>[0]> = {}) {
   return new CoreUpdater({
     installDir, current: '9.0.0', registry: () => registry, blocker: async () => undefined,
-    restart: () => true, restartDelay: 0, nodeVersion: '24.13.0', ...options,
+    restart: () => true, restartDelay: 0, nodeVersion: '24.13.0', container: false, cwd: installDir, ...options,
   })
 }
 
@@ -278,5 +280,54 @@ describe('the WebUI routes', () => {
     expect((await json(routes.request('/check', { method: 'POST' }))).body.data).toMatchObject({ latest: '9.1.0', available: false })
     const refused = await json(routes.request('/update', { method: 'POST', body: JSON.stringify({ version: '9.1.0' }), headers: { 'content-type': 'application/json' } }))
     expect(refused).toEqual({ status: 409, body: { success: false, message: '在容器中运行时请更新镜像，不能自动更新' } })
+  })
+})
+
+describe('updating in a container', () => {
+  it('installs the whole release into the data volume and leaves the image files alone', async () => {
+    vi.useFakeTimers()
+    // An older self-installed release, and one set aside after failing to start
+    write('data/llbot-runtime/package.json', JSON.stringify({ name: CORE_PACKAGE, version: '9.0.5' }))
+    write('data/llbot-runtime/only-in-9.0.5.txt', 'old')
+    write('data/llbot-runtime.failed/llbot-core.js', 'broken')
+    const { client } = fakeRegistry({ '9.1.0': release('9.1.0') }, '9.1.0')
+    const restart = vi.fn(() => true)
+    expect((await updater(client, { container: true, restart }).update('9.1.0')).state).toBe('restarting')
+
+    const runtime = runtimeDir(installDir)
+    expect(readFileSync(path.join(runtime, 'llbot-core.js'), 'utf8')).toBe('core 9.1.0')
+    expect(readFileSync(path.join(runtime, 'node_modules/a/index.js'), 'utf8')).toBe('a 9.1.0')
+    expect(existsSync(path.join(runtime, 'only-in-9.0.5.txt'))).toBe(false)
+    expect(existsSync(failedRuntimeDir(installDir))).toBe(false)
+    // The image's files: untouched, no backup next to them
+    expect(read('llbot-core.js')).toBe('core 9.0.0')
+    expect(read('node_modules/stale/index.js')).toBe('only in 9.0.0')
+    expect(existsSync(path.join(installDir, WORK_DIR))).toBe(false)
+    expect(read('data/instances/default/plugins.json')).toBe('user settings')
+    expect(readdirSync(path.join(installDir, 'data')).sort()).toEqual(['instances', 'llbot-runtime'])
+    await vi.runAllTimersAsync()
+    expect(restart).toHaveBeenCalledOnce()
+  })
+
+  it('removes what an interrupted container update left in the data directory', async () => {
+    write('data/llbot-runtime.staging-9.1.0/llbot.js', 'half')
+    write('data/llbot-runtime.old/llbot.js', 'previous')
+    write('data/llbot-runtime/llbot.js', 'current')
+    const { client } = fakeRegistry({})
+    await updater(client, { container: true }).cleanup()
+    expect(readdirSync(path.join(installDir, 'data')).sort()).toEqual(['instances', 'llbot-runtime'])
+  })
+})
+
+describe('what blocks an update', () => {
+  it('refuses a source tree, then LLBOT_SELF_UPDATE=0', async () => {
+    const source = mkdtempSync(path.join(tmpdir(), 'llbot-source-'))
+    try {
+      expect(await updateBlocker(source)).toBe('从源码运行时不能自动更新')
+    } finally {
+      rmSync(source, { recursive: true, force: true })
+    }
+    vi.stubEnv('LLBOT_SELF_UPDATE', '0')
+    expect(await updateBlocker(installDir)).toBe('已用环境变量 LLBOT_SELF_UPDATE=0 关闭自动更新')
   })
 })
