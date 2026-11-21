@@ -191,6 +191,9 @@ const PluginsPage: React.FC = () => {
     />
   }
   const clearFilters = () => update({ ...DEFAULT_VIEW, installation: view.installation })
+  // Keeps the search, category and origin; resets what the installation buttons reset too
+  const searchAll = () => update({ installation: 'all', status: 'all', updatesOnly: false })
+  const canSearchAll = view.installation !== 'all' && !view.updatesOnly && catalog.available
 
   return (
     <div className="space-y-5">
@@ -257,7 +260,10 @@ const PluginsPage: React.FC = () => {
             <>
               {shown.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{items.map(card)}</div> : !catalogLoading && (view.installation === 'installed' || (catalogLoaded && !catalog.sources.some(source => source.state.error))) && (
                 <div className="card p-10 text-center"><Puzzle size={36} className="mx-auto text-theme-hint mb-3" /><p className="text-sm text-theme-secondary">{view.updatesOnly ? '暂无可更新的插件' : filtered ? '没有符合条件的插件' : view.installation === 'uninstalled' ? '当前目录没有未安装的插件' : '暂无插件'}</p>
-                  {filtered && <button type="button" onClick={clearFilters} className="btn-glass mt-4 text-sm">清除筛选</button>}
+                  {filtered && <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    {canSearchAll && <button type="button" onClick={searchAll} className="btn-primary text-sm">在全部插件中搜索</button>}
+                    <button type="button" onClick={clearFilters} className="btn-glass text-sm">清除筛选</button>
+                  </div>}
                 </div>
               )}
               {pages > 1 && <div className="flex flex-wrap items-center justify-center gap-1">
