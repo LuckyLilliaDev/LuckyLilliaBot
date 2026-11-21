@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
@@ -9,7 +9,7 @@ vi.mock('@/common/globalVars', () => ({ DATA_DIR, STATE_DIR: path.join(DATA_DIR,
 vi.unmock('@/common/utils/environment')
 
 const { resolveInstance } = await import('@/common/instance')
-const { lockInstance, InstanceLockedError } = await import('@/main/instanceLock')
+const { lockInstance, InstanceLockedError, runningInstances } = await import('@/main/instanceLock')
 
 const argv = (...args: string[]) => ['node', 'llbot.js', ...args]
 
@@ -57,5 +57,21 @@ describe('lockInstance', () => {
     const release = await lockInstance('lock-c')
     release()
     expect(existsSync(path.join(DATA_DIR, 'state', 'instances', 'lock-c.json'))).toBe(false)
+  })
+})
+
+describe('runningInstances', () => {
+  it('lists the other instances whose lock answers, not ones a killed process left behind', async () => {
+    const mine = await lockInstance('run-self')
+    const other = await lockInstance('run-other')
+    // What a process killed without cleaning up leaves: the holder file, but nothing answers
+    writeFileSync(path.join(DATA_DIR, 'state', 'instances', 'run-dead.json'), JSON.stringify({ pid: 1, host: 'x', since: 0 }))
+    const running = await runningInstances('run-self')
+    expect(running).toContain('run-other')
+    expect(running).not.toContain('run-self')
+    expect(running).not.toContain('run-dead')
+    other()
+    expect(await runningInstances('run-self')).not.toContain('run-other')
+    mine()
   })
 })

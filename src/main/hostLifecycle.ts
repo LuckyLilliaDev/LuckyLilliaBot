@@ -1,3 +1,7 @@
+import { isSupervised, parentPidOf, RESTART_EXIT_CODE } from './restart'
+
+let restart: (() => void) | undefined
+
 /** One host shutdown path: signals and the parent's death both await plugin disposal. */
 export function installHostLifecycle(dispose: () => Promise<void>, log: (error: unknown) => void): () => Promise<void> {
   let stopping: Promise<void> | undefined
@@ -8,15 +12,13 @@ export function installHostLifecycle(dispose: () => Promise<void>, log: (error: 
     process.off('SIGTERM', requestStop)
     await dispose()
   })()
-  const requestStop = () => { void stop().then(() => process.exit(0), error => { log(error); process.exit(1) }) }
+  const exitAfterStop = (code: number) => { void stop().then(() => process.exit(code), error => { log(error); process.exit(1) }) }
+  const requestStop = () => exitAfterStop(0)
+  restart = () => exitAfterStop(RESTART_EXIT_CODE)
   process.once('SIGINT', requestStop)
   process.once('SIGTERM', requestStop)
-  // The first --parent-pid wins, whether passed as --parent-pid=<pid> or --parent-pid <pid>.
-  const parentIndex = process.argv.findIndex(arg => arg === '--parent-pid' || arg.startsWith('--parent-pid='))
-  const parentArg = process.argv[parentIndex]
-  const parentValue = parentArg === '--parent-pid' ? process.argv[parentIndex + 1] : parentArg?.slice('--parent-pid='.length)
-  const parent = parentValue && /^\d+$/.test(parentValue) ? Number(parentValue) : NaN
-  if (Number.isSafeInteger(parent) && parent > 0 && parent !== process.pid) {
+  const parent = parentPidOf(process.argv)
+  if (!Number.isNaN(parent) && parent !== process.pid) {
     parentTimer = setInterval(() => {
       try { process.kill(parent, 0) } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ESRCH') requestStop()
@@ -25,4 +27,17 @@ export function installHostLifecycle(dispose: () => Promise<void>, log: (error: 
     parentTimer.unref()
   }
   return stop
+}
+
+/** Whether requestRestart() can bring the bot back: only a supervisor (llbot.js) starts it again. */
+export const canRestart = (): boolean => isSupervised() && restart !== undefined
+
+/**
+ * Shuts the bot down like a stop and has the supervisor start it again. False, doing nothing, when no supervisor
+ * runs it (`--no-supervisor`, or the source tree in development).
+ */
+export function requestRestart(): boolean {
+  if (!canRestart()) return false
+  restart!()
+  return true
 }

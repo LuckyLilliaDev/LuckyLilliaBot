@@ -1,6 +1,6 @@
 import net from 'node:net'
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { hostname, tmpdir } from 'node:os'
 import path from 'node:path'
 import { DATA_DIR, STATE_DIR } from '@/common/globalVars'
@@ -49,6 +49,30 @@ export async function lockInstance(name: string): Promise<() => void> {
     return release
   }
   throw new Error(`没法为实例 ${name} 建立实例锁`)
+}
+
+/**
+ * The other instances of this data directory that some process runs right now: their lock still answers. A lock
+ * left behind by a killed process does not.
+ */
+export async function runningInstances(except?: string): Promise<string[]> {
+  let names: string[]
+  try {
+    names = readdirSync(path.join(STATE_DIR, 'instances')).filter(file => file.endsWith('.json')).map(file => file.slice(0, -5))
+  } catch {
+    return []
+  }
+  const running: string[] = []
+  for (const name of names) {
+    if (name === except) continue
+    for (const endpoint of endpointsFor(name)) {
+      if (await answers(endpoint)) {
+        running.push(name)
+        break
+      }
+    }
+  }
+  return running
 }
 
 function endpointsFor(name: string): string[] {

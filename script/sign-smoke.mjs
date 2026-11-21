@@ -185,7 +185,7 @@ async function main() {
   }
   Object.assign(environment, { AUTH_TOKEN: token, LLBOT_LOG_LEVEL: 'info', NO_COLOR: '1',
     LLBOT_SIGN_SMOKE_LOADER: native.loaderPath, LLBOT_SIGN_SMOKE_NONCE: nonce })
-  const child = spawn(process.execPath, ['--require', path.join(botRoot, 'script/sign-smoke-probe.cjs'), path.join(config.dist, 'llbot.js'),
+  const child = spawn(process.execPath, ['--require', path.join(botRoot, 'script/sign-smoke-probe.cjs'), path.join(config.dist, 'llbot.js'), '--no-supervisor',
     `--parent-pid=${keeper.pid}`, '--instance', workspace.instance, '--plugin-dir', workspace.pluginRoot, '--protocol', config.protocol, '-q', config.uin],
   { cwd: workspace.directory, env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   delete environment.AUTH_TOKEN

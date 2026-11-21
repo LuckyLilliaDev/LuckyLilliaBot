@@ -14,6 +14,7 @@ export interface PackageManifest {
   os?: string[]
   cpu?: string[]
   libc?: string[]
+  engines?: Record<string, string>
   deprecated?: string
   /** Abbreviated documents only; full ones have `scripts` */
   hasInstallScript?: boolean

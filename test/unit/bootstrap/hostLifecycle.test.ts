@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { installHostLifecycle } from '@/main/hostLifecycle'
+import { canRestart, installHostLifecycle, requestRestart } from '@/main/hostLifecycle'
+import { RESTART_EXIT_CODE } from '@/main/restart'
 
 const originalArgv = process.argv
 const parent = process.pid + 100
@@ -71,5 +72,29 @@ describe('host parent lifecycle', () => {
     expect(process.kill).not.toHaveBeenCalled()
     expect(dispose).not.toHaveBeenCalled()
     expect(process.exit).not.toHaveBeenCalled()
+  })
+})
+
+describe('restart requests', () => {
+  it('does nothing without a supervisor to start the bot again', async () => {
+    const dispose = vi.fn(async () => {})
+    stop = installHostLifecycle(dispose, vi.fn())
+    expect(canRestart()).toBe(false)
+    expect(requestRestart()).toBe(false)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(dispose).not.toHaveBeenCalled()
+    expect(process.exit).not.toHaveBeenCalled()
+  })
+
+  it('stops like a shutdown, then exits with the restart code for the supervisor', async () => {
+    vi.stubEnv('LLBOT_SUPERVISED', '1')
+    const events: string[] = []
+    const dispose = vi.fn(async () => { events.push('disposed') })
+    vi.mocked(process.exit).mockImplementation((code) => { events.push('exit ' + code); return undefined as never })
+    stop = installHostLifecycle(dispose, vi.fn())
+    expect(canRestart()).toBe(true)
+    expect(requestRestart()).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(events).toEqual(['disposed', 'exit ' + RESTART_EXIT_CODE])
   })
 })

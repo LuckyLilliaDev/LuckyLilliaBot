@@ -22,6 +22,7 @@ import BotsService from '../universal/bots'
 import HttpService from '../universal/http'
 import { builtinPlugins } from '../plugin/internal'
 import { installFFmpegBridge } from '@/common/utils/ffmpeg'
+import * as CoreUpdate from './coreUpdate'
 
 declare module 'cordis' {
   interface Events {
@@ -107,6 +108,8 @@ async function onLoad() {
     builtins: builtinPlugins,
     trust: true,
   })
+  // Reads the market's npm registries; waits for the plugin service like the builtins do
+  ctx.plugin(CoreUpdate)
 
   // The settings are the instance's, fixed at startup: applied now and watched from here on
   ctx.inject(['config'], (ctx) => {

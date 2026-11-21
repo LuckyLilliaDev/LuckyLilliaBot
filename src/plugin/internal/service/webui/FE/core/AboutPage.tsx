@@ -1,5 +1,5 @@
 import React from 'react'
-import { version } from '../../../../../../version'
+import VersionCard from './VersionCard'
 
 const CommunityIcon: React.FC<{ service: 'telegram' | 'qq' }> = ({ service }) => (
   <div
@@ -104,25 +104,8 @@ const AboutPage: React.FC = () => (
       </div>
     </div>
 
-    {/* 版本信息 */}
-    <div className="card p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl gradient-primary-br flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div>
-            <div className="text-sm font-medium text-theme">版本信息</div>
-            <div className="text-xs text-theme-muted">Lucky Lillia Bot {version}</div>
-          </div>
-        </div>
-        <div className="text-sm text-theme-secondary">
-          WebUI Powered by  <span className="font-semibold text-pink-500">React + Tailwind</span>
-        </div>
-      </div>
-    </div>
+    {/* 版本信息与更新 */}
+    <VersionCard />
   </div>
 )
 

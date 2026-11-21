@@ -197,7 +197,7 @@ async function main() {
     if (/^(NODE_OPTIONS|AUTH_TOKEN|LLBOT_INSTANCE|LLBOT_WEBUI_.*|LLBOT_LOG_LEVEL|PROTOCOL_MODE|PROTOCOL)$/i.test(name)) delete environment[name]
   }
   Object.assign(environment, { AUTH_TOKEN: token, LLBOT_LOG_LEVEL: 'info', NO_COLOR: '1' })
-  const child = spawn(process.execPath, [path.join(config.dist, 'llbot.js'), `--parent-pid=${keeper.pid}`, '--instance', workspace.instance, '--plugin-dir', workspace.pluginRoot, '--nativeqq', '--nativeqq-config', workspace.nativeConfig, '-q', config.uin],
+  const child = spawn(process.execPath, [path.join(config.dist, 'llbot.js'), '--no-supervisor', `--parent-pid=${keeper.pid}`, '--instance', workspace.instance, '--plugin-dir', workspace.pluginRoot, '--nativeqq', '--nativeqq-config', workspace.nativeConfig, '-q', config.uin],
     { cwd: workspace.directory, env: environment, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   // Retain the token only in the redactor closure and the already-spawned child's environment.
   delete environment.AUTH_TOKEN
