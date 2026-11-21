@@ -66,7 +66,7 @@ function consoleShim(namespace) {
 }
 
 // src/support/utils/ffmpeg.ts
-var FFMPEG_PLUGIN = "lucky-lillia-plugin-ffmpeg";
+var FFMPEG_PLUGIN = "@luckylillia-dev/plugin-ffmpeg";
 var FFmpegUnavailableError = class extends Error {
   code = "FFMPEG_PLUGIN_MISSING";
   constructor(message = `\u672A\u5B89\u88C5\u6216\u672A\u542F\u7528 FFmpeg \u63D2\u4EF6\uFF08${FFMPEG_PLUGIN}\uFF09\uFF0C\u8BF7\u5B89\u88C5\u5E76\u542F\u7528\u540E\u91CD\u8BD5`) {

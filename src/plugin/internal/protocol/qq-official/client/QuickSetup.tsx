@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ExternalLink, Loader2, RefreshCw } from 'lucide-react'
-import { usePluginContext } from '@luckylillia/plugin-sdk/webui'
+import { usePluginContext } from '@luckylillia-dev/plugin-sdk/webui'
 import type { QQSetupState } from '../setupTypes'
 
 const API = '/api/qq-official/setup'

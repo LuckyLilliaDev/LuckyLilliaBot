@@ -4,15 +4,16 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context, Fiber, FiberState, Inject, Plugin, Service, resolveConfig, symbols } from 'cordis'
-import type { LLBotManifest } from '@luckylillia/plugin-sdk'
+import type { LLBotManifest } from '@luckylillia-dev/plugin-sdk'
 import type Schema from 'schemastery'
 import { hydrate, SchemaNode } from '@/common/schema/model'
 import { stripDefaults, withDefaults } from '@/common/schema/diff'
 import {
-  isImagePath, isInside, matchesPluginVersion, normalizeService, PluginAuthor, PluginPackage, readPluginPackage, scanPluginRoots, SDK_PACKAGE,
+  isImagePath, isInside, matchesPluginVersion, normalizeService, PluginAuthor, PluginPackage, readPluginPackage, scanPluginRoots, SDK_PACKAGE, sdkRangeOf,
   sdkIncompatibility, ServiceDeclaration,
 } from './manifest'
 import { installPluginResolver, ResolverState, sharedSpecifierMap } from './resolve-hook'
+import { withCurrentNames } from './renamed'
 import {
   newEntryId, normalizeUi, PluginEntry, PluginsFile, PluginStore, UiPrefs,
 } from './store'
@@ -301,6 +302,8 @@ class PluginService extends Service {
   private readonly sharedChanges = new Map<string, SharedPackageChange>()
   private readonly sharedFinishing = new Set<string>()
   private readonly sharedWatchUntil = new Map<string, number>()
+  /** Change id -> the copy of a renamed package under its old name, which installing the new name replaces */
+  private readonly renamedCopies = new Map<string, PluginPackage>()
   private readonly lifecycle = { closing: false }
 
   constructor(ctx: Context, public config: PluginService.Config) {
@@ -447,7 +450,7 @@ class PluginService extends Service {
     this.changed()
   }
 
-  /** The @luckylillia/plugin-sdk version plugins' peerDependencies are checked against */
+  /** The @luckylillia-dev/plugin-sdk version plugins' peerDependencies are checked against */
   hostSdk(): string | undefined {
     return this.sdkVersion
   }
@@ -483,7 +486,7 @@ class PluginService extends Service {
       }
       const removed = this.entriesOf(name).map(rt => rt.entry.id)
       const { instances } = await this.changePackage({ root: location.root, name, directory: location.directory,
-        kind: 'uninstall', keepConfig: options.keepConfig }, () => removeScannedPackage(location, pkg.root, name))
+        kind: 'uninstall', keepConfig: options.keepConfig }, () => removeScannedPackage(location, pkg.root, pkg.previousName ?? name))
       return { removed, instances }
     })
   }
@@ -501,12 +504,15 @@ class PluginService extends Service {
     const pkg = this.packages.get(change.name)
     const target = scannedPackagePath(change.root, change.directory ?? change.name)
     const source = change.directory && pkg?.location ? scannedPackagePath(pkg.location.root, pkg.location.directory) : pkg?.root
-    if (pkg && (!source || !samePath(source, target))) throw new PluginForbiddenError(`${change.name} 在此实例使用其他目录中的同名包`)
+    // Installing a renamed package under its new name takes over from the copy under its old name, removed after
+    const renamedCopy = pkg?.previousName && pkg.location && change.kind === 'install' ? pkg : undefined
+    if (pkg && !renamedCopy && (!source || !samePath(source, target))) throw new PluginForbiddenError(`${change.name} 在此实例使用其他目录中的同名包`)
+    if (renamedCopy) this.renamedCopies.set(change.id, renamedCopy)
     if (change.manifest) {
       const problem = this.checkBuiltinPackage(change.name, change.manifest)
-        ?? sdkIncompatibility(change.manifest.peerDependencies?.[SDK_PACKAGE], this.sdkVersion)
+        ?? sdkIncompatibility(sdkRangeOf(change.manifest.peerDependencies), this.sdkVersion)
       if (problem) throw new PluginForbiddenError(problem)
-      for (const [name, range] of Object.entries(change.manifest.llbot?.dependencies ?? {}) as [string, string][]) {
+      for (const [name, range] of Object.entries(withCurrentNames(change.manifest.llbot?.dependencies) ?? {}) as [string, string][]) {
         const dependency = this.packages.get(name) ?? this.builtinPackages.list().find(item => item.name === name)
         if (!dependency || !matchesPluginVersion(dependency.version, range)) {
           throw new PluginForbiddenError(`${change.name} requires ${name}@${range}; this instance has ${dependency?.version ?? 'no installed version'}`)
@@ -534,7 +540,14 @@ class PluginService extends Service {
 
   private async finishSharedChange(change: SharedPackageChange, applied: boolean): Promise<Omit<SharedPackageResult, 'instance' | 'pid'>> {
     const prepared = this.sharedChanges.get(change.name)?.id === change.id
+    const renamedCopy = this.renamedCopies.get(change.id)
+    this.renamedCopies.delete(change.id)
     if (!prepared) return { status: 'unchanged', entries: [] }
+    // The copy under the old name goes once the new one is in; the instance that installed removes it
+    if (applied && renamedCopy?.location && renamedCopy.previousName && change.initiator === this.shared.id) {
+      await removeScannedPackage(renamedCopy.location, renamedCopy.root, renamedCopy.previousName)
+        .catch(error => this.home.logger.warn(`${change.name}: 未能删除旧包名 ${renamedCopy.previousName} 的安装目录：${errorText(error)}`))
+    }
     this.sharedFinishing.add(change.id)
     this.sharedChanges.delete(change.name)
     this.sharedWatchUntil.set(scannedPackagePath(change.root, change.directory ?? change.name), Date.now() + 1000)
@@ -1063,8 +1076,16 @@ class PluginService extends Service {
       if (this.builtinPackages.has(pkg.name) || (pkg.manifest as any).builtin) continue
       const existing = next.get(pkg.name)
       if (existing) {
-        this.ctx.logger.warn(`duplicate plugin ${pkg.name} at ${pkg.root}, keeping ${existing.root}`)
-        continue
+        // Installed under its new name, a renamed package replaces the copy still there under its old name
+        if (existing.previousName && !pkg.previousName) {
+          this.ctx.logger.warn(`${pkg.name}: using ${pkg.root}; the copy under its old name ${existing.previousName} at ${existing.root} is no longer used`)
+        } else if (pkg.previousName && !existing.previousName) {
+          this.ctx.logger.warn(`${pkg.name}: using ${existing.root}; the copy under its old name ${pkg.previousName} at ${pkg.root} is no longer used`)
+          continue
+        } else {
+          this.ctx.logger.warn(`duplicate plugin ${pkg.name} at ${pkg.root}, keeping ${existing.root}`)
+          continue
+        }
       }
       for (const warning of pkg.warnings) this.ctx.logger.warn(`${pkg.name}: ${warning}`)
       next.set(pkg.name, pkg)

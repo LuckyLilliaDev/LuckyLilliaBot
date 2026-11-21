@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import { create } from 'zustand'
-import type { ConfigEditorProps, FieldProps, SlotCardinality } from '@luckylillia/plugin-sdk/webui'
+import type { ConfigEditorProps, FieldProps, SlotCardinality } from '@luckylillia-dev/plugin-sdk/webui'
 import type { PluginStatus, UiPrefs, UiPrefsPatch } from '../types/plugins'
 
 interface Owned {

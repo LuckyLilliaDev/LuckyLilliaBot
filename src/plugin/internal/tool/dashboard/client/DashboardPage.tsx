@@ -1,5 +1,5 @@
 import React from 'react'
-import { Icon, Slot, type DashboardCardOptions } from '@luckylillia/plugin-sdk/webui'
+import { Icon, Slot, type DashboardCardOptions } from '@luckylillia-dev/plugin-sdk/webui'
 import { GLYPH } from './cards'
 
 const CARD_SIZE: Record<NonNullable<DashboardCardOptions['size']>, string> = {

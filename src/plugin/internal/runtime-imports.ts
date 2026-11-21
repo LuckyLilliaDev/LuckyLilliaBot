@@ -15,12 +15,13 @@ import * as m12 from "../../main/config/validate"
 import * as m13 from "../../main/log"
 import * as m14 from "../host/index"
 import * as m15 from "../host/manifest"
-import * as m16 from "../host/resolve-hook"
-import * as m17 from "../host/shared-packages"
-import * as m18 from "./adapter/adapterEntry"
-import * as m19 from "./adapter/settingsTemplate"
-import * as m20 from "../../universal/fallback"
-import * as m21 from "../../version"
+import * as m16 from "../host/renamed"
+import * as m17 from "../host/resolve-hook"
+import * as m18 from "../host/shared-packages"
+import * as m19 from "./adapter/adapterEntry"
+import * as m20 from "./adapter/settingsTemplate"
+import * as m21 from "../../universal/fallback"
+import * as m22 from "../../version"
 import { registerBuiltinRuntime } from '../host/builtin-runtime'
 registerBuiltinRuntime({
   "common/configPaths.ts": m0,
@@ -39,10 +40,11 @@ registerBuiltinRuntime({
   "main/log.ts": m13,
   "plugin/host/index.ts": m14,
   "plugin/host/manifest.ts": m15,
-  "plugin/host/resolve-hook.ts": m16,
-  "plugin/host/shared-packages.ts": m17,
-  "plugin/internal/adapter/adapterEntry.ts": m18,
-  "plugin/internal/adapter/settingsTemplate.ts": m19,
-  "universal/fallback.ts": m20,
-  "version.ts": m21,
+  "plugin/host/renamed.ts": m16,
+  "plugin/host/resolve-hook.ts": m17,
+  "plugin/host/shared-packages.ts": m18,
+  "plugin/internal/adapter/adapterEntry.ts": m19,
+  "plugin/internal/adapter/settingsTemplate.ts": m20,
+  "universal/fallback.ts": m21,
+  "version.ts": m22,
 })

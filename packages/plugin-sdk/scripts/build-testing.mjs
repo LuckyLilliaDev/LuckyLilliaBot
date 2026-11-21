@@ -1,4 +1,4 @@
-// Bundles the bot's neutral layer with a fake bot into lib/testing.js: @luckylillia/plugin-sdk/testing. Its types
+// Bundles the bot's neutral layer with a fake bot into lib/testing.js: @luckylillia-dev/plugin-sdk/testing. Its types
 // are src/testing.ts. The packages a plugin shares with the bot stay imports, as in a plugin build.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

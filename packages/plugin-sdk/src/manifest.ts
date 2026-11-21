@@ -59,7 +59,7 @@ export interface LLBotManifest {
   }
   /**
    * ES module extending the WebUI, relative to the package root: sidebar pages, Dashboard cards, a custom
-   * config editor. See `@luckylillia/plugin-sdk/webui`. Its directory is served as a whole, so keep the
+   * config editor. See `@luckylillia-dev/plugin-sdk/webui`. Its directory is served as a whole, so keep the
    * WebUI build in a folder of its own.
    */
   webui?: string

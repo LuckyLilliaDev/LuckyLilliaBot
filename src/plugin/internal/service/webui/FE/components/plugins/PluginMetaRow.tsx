@@ -1,5 +1,5 @@
 import React from 'react'
-import type { PluginMetaRowProps } from '@luckylillia/plugin-sdk/webui'
+import type { PluginMetaRowProps } from '@luckylillia-dev/plugin-sdk/webui'
 import { CATEGORIES } from './listing'
 
 const webLink = (url: string | undefined) => url && /^https?:\/\//i.test(url) ? url : undefined

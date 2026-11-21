@@ -1,5 +1,5 @@
 {
-  "name": "@luckylillia/plugin-market",
+  "name": "@luckylillia-dev/plugin-market",
   "version": "1.0.0",
   "type": "module",
   "description": "Browse the market catalog and install, update or remove listed npm plugins in the WebUI",
@@ -21,7 +21,7 @@
     "node": ">=22.15"
   },
   "peerDependencies": {
-    "@luckylillia/plugin-sdk": "^1.0.0"
+    "@luckylillia-dev/plugin-sdk": "^1.0.0"
   },
   "llbot": {
     "category": "tool",

@@ -1,5 +1,5 @@
 import { Context } from 'cordis'
-import type { NeutralEvent } from '@luckylillia/plugin-sdk'
+import type { NeutralEvent } from '@luckylillia-dev/plugin-sdk'
 import type { QQOfficialConfig } from '@/common/types'
 import type { SatoriEvent } from '../../../../universal/types'
 import { CredentialError, QQOfficialApi } from './api'

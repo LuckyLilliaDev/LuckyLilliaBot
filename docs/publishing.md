@@ -34,7 +34,7 @@ my-plugin/
   "main": "lib/index.js",
   "files": ["lib", "webui", "assets", "docs"],
   "keywords": ["luckylillia-plugin"],
-  "peerDependencies": { "@luckylillia/plugin-sdk": "^1.0.0" },
+  "peerDependencies": { "@luckylillia-dev/plugin-sdk": "^1.0.0" },
   "llbot": {
     "title": { "zh": "问候示例", "en": "Greeting example" },
     "description": "演示配置、指令和跨平台消息",
@@ -52,7 +52,7 @@ my-plugin/
 
 填写时区分 npm 包信息和 `llbot` 的宿主约定：
 
-- `name` 使用合法的 npm 包名。脚手架默认生成 `luckylillia-plugin-*`，也可使用 npm scope，例如 `@luckylillia/plugin-aiprovider`。
+- `name` 使用合法的 npm 包名。脚手架默认生成 `luckylillia-plugin-*`，也可使用 npm scope，例如 `@luckylillia-dev/plugin-aiprovider`。
 - `main` 或 `exports["."]` 指向后端入口。ESM 的 `.js` 文件需要 `"type": "module"`。
 - SDK 的 `peerDependencies` 用于兼容性检查。插件包依赖和服务依赖的声明见[依赖与提供的服务](basics.md#依赖与提供的服务)。
 - `llbot.hidden` 从 WebUI 列表隐藏条目，`llbot.preview` 显示开发中标记，两者都不是权限设置。
@@ -126,7 +126,7 @@ timer             trophy          users           wrench      zap
 使用打包工具时，下列共享包及其子路径必须设为 `external`：
 
 ```text
-@luckylillia/plugin-sdk
+@luckylillia-dev/plugin-sdk
 cordis
 cosmokit
 schemastery
@@ -159,7 +159,7 @@ npm pack --dry-run
 
 插件可作为 npm 包通过 `npm publish` 发布，公共 scoped 包需相应公开发布设置。模板里的 `luckylillia-plugin` keyword 可保留，但不是市场收录条件。
 
-默认市场从 npm 包 `@luckylillia/market` 读取目录。要让插件出现在 Bot 的市场中：
+默认市场从 npm 包 `@luckylillia-dev/market` 读取目录。要让插件出现在 Bot 的市场中：
 
 1. 完成[产物检查](#检查发布产物)，将插件发布到 npm。
 2. 到 [LuckyLillia.Market](https://github.com/LuckyLilliaDev/LuckyLillia.Market) 创建「注册插件」Issue，提交 npm 包名并选择插件分类。分类选项与上文 `llbot.category` 的七个值一致；目录按登记选择保存 `category`，自动更新版本时保留，建议与包内声明保持一致。登记检查会从发布包读取 `llbot`、标题、简介、作者和公开 GitHub 仓库地址。
@@ -242,7 +242,7 @@ Bot 随附的官方内置插件也有独立的 npm 包名和版本，参与同�
 SDK 已发布，可在任意独立目录使用下面的命令创建插件：
 
 ```sh
-npx -p @luckylillia/plugin-sdk luckylillia-plugin create my-plugin
+npx -p @luckylillia-dev/plugin-sdk luckylillia-plugin create my-plugin
 cd my-plugin
 npm install
 npm test
@@ -253,8 +253,8 @@ npm test
 无头部署时，可以用启动参数安装并启用插件，不用打开 WebUI：
 
 ```sh
-node llbot.js --plugin @luckylillia/plugin-nt-protocol --plugin @luckylillia/plugin-onebot11
-node llbot.js --instance second --plugin=@luckylillia/plugin-nt-protocol,@luckylillia/plugin-milky
+node llbot.js --plugin @luckylillia-dev/plugin-nt-protocol --plugin @luckylillia-dev/plugin-onebot11
+node llbot.js --instance second --plugin=@luckylillia-dev/plugin-nt-protocol,@luckylillia-dev/plugin-milky
 ```
 
 - `--plugin` 可重复，也可用逗号分隔多个包。只接受包名，不接受版本、标签、URL 或路径；本地开发目录用 `--plugin-dir`。
@@ -263,4 +263,4 @@ node llbot.js --instance second --plugin=@luckylillia/plugin-nt-protocol,@luckyl
 - 任何一个包安装、信任或初始化失败，Bot 记录原因后以退出码 1 结束。等待 QQ 登录等服务的 `pending` 状态不算失败。
 - 参数产生的信任和启用状态会保存，之后去掉参数也不会撤销。
 
-Docker 镜像把参数直接写在镜像名之后：`docker run ... <镜像> --plugin @luckylillia/plugin-nt-protocol`；Compose 写作 `command: ["--plugin", "@luckylillia/plugin-nt-protocol"]`。
+Docker 镜像把参数直接写在镜像名之后：`docker run ... <镜像> --plugin @luckylillia-dev/plugin-nt-protocol`；Compose 写作 `command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]`。

@@ -1,7 +1,7 @@
 import h from '@satorijs/element'
 import { Context } from 'cordis'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Bot, NeutralEvent, Session } from '@luckylillia/plugin-sdk'
+import type { Bot, NeutralEvent, Session } from '@luckylillia-dev/plugin-sdk'
 import BotsService, { type Place } from '@/universal/bots'
 
 const bot: Bot = {

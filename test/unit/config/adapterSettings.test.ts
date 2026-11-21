@@ -26,7 +26,7 @@ describe('Satori settings', () => {
 
 describe('configuration compatibility for extracted adapters', () => {
   it('targets independently installed OneBot and Milky packages while keeping Satori builtin', () => {
-    expect(ADAPTER_ENTRIES).toEqual({ ob11: '@luckylillia/plugin-onebot11', milky: '@luckylillia/plugin-milky', satori: 'builtin:satori' })
+    expect(ADAPTER_ENTRIES).toEqual({ ob11: '@luckylillia-dev/plugin-onebot11', milky: '@luckylillia-dev/plugin-milky', satori: 'builtin:satori' })
   })
 
   it('keeps legacy template sections available without importing optional adapter implementations', () => {

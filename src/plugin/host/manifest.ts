@@ -3,10 +3,18 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { satisfies } from 'compare-versions'
 import { satisfies as satisfiesRange, validRange } from 'semver'
-import type { LLBotManifest, PluginCategory } from '@luckylillia/plugin-sdk'
+import type { LLBotManifest, PluginCategory } from '@luckylillia-dev/plugin-sdk'
 import { inspectPackageLocation, type PackageLocation } from './package-location'
+import { currentPackageName, previousPackageName, withCurrentNames } from './renamed'
 
-export const SDK_PACKAGE = '@luckylillia/plugin-sdk'
+export const SDK_PACKAGE = '@luckylillia-dev/plugin-sdk'
+
+/** The SDK range a package declares, under the SDK's name or its name before the move to @luckylillia-dev. */
+export function sdkRangeOf(peerDependencies: Record<string, string> | undefined): string | undefined {
+  return withCurrentNames(peerDependencies)?.[SDK_PACKAGE]
+}
+
+export { currentPackageName, previousPackageName }
 
 /** The values of `llbot.category`, in the order the plugin page lists them. */
 export const PLUGIN_CATEGORIES: readonly PluginCategory[] = ['protocol', 'adapter', 'chat', 'tool', 'service', 'theme', 'other']
@@ -30,7 +38,10 @@ export interface PluginScreenshot {
 }
 
 export interface PluginPackage {
+  /** The package's name now: a package from before its rename goes by the new name (renamed.ts) */
   name: string
+  /** The name in its package.json, when that is an old name the package has since been renamed from */
+  previousName?: string
   version: string
   /** Absolute package directory. */
   root: string
@@ -44,7 +55,7 @@ export interface PluginPackage {
   author?: PluginAuthor
   /** Browser URL normalized from package.json `repository`; HTTP(S) only. */
   repository?: string
-  /** `peerDependencies['@luckylillia/plugin-sdk']`, if declared. */
+  /** `peerDependencies['@luckylillia-dev/plugin-sdk']`, if declared. */
   sdkRange?: string
   /** Absolute path of the `llbot.webui` module, when it exists inside the package. */
   webui?: string
@@ -116,8 +127,10 @@ export async function readPluginPackage(dir: string): Promise<PluginPackage | un
     else webui = file
   }
   const { icon, details } = pkg.llbot
+  const name = currentPackageName(pkg.name)
   return {
-    name: pkg.name,
+    name,
+    ...name === pkg.name ? {} : { previousName: pkg.name },
     version: typeof pkg.version === 'string' ? pkg.version : '0.0.0',
     root,
     main,
@@ -130,7 +143,7 @@ export async function readPluginPackage(dir: string): Promise<PluginPackage | un
     description: typeof pkg.description === 'string' ? pkg.description : undefined,
     author: parseAuthor(pkg.author),
     repository: parseRepository(pkg.repository),
-    sdkRange: pkg.peerDependencies?.[SDK_PACKAGE],
+    sdkRange: sdkRangeOf(pkg.peerDependencies),
     webui,
     iconFile: typeof icon === 'string' && isImagePath(icon) ? packageFile(root, icon, 'llbot.icon', warnings) : undefined,
     detailsFile: details === undefined ? undefined : packageFile(root, details, 'llbot.details', warnings, ['.md', '.markdown']),
@@ -243,7 +256,8 @@ export function parsePluginDependencies(value: unknown): Record<string, string> 
     }
     dependencies.push([name, range.trim()])
   }
-  return Object.fromEntries(dependencies)
+  // A plugin from before the move to @luckylillia-dev names its dependencies by their old names
+  return withCurrentNames(Object.fromEntries(dependencies))!
 }
 
 /** npm semver matching, shared by runtime package gates and the market's plugin dependency planner. */

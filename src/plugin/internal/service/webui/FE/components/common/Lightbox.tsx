@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ImageOff, X } from 'lucide-react'
-import type { LightboxProps } from '@luckylillia/plugin-sdk/webui'
+import type { LightboxProps } from '@luckylillia-dev/plugin-sdk/webui'
 
-export type { LightboxImage } from '@luckylillia/plugin-sdk/webui'
+export type { LightboxImage } from '@luckylillia-dev/plugin-sdk/webui'
 
 /** An image over everything, with the others of its set a ← / → away. */
 export const Lightbox: React.FC<LightboxProps> = ({ images, index, onIndex, onClose }) => {

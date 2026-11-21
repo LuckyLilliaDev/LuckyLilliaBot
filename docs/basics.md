@@ -53,7 +53,7 @@ export const inject = ['bots', 'http']
 
 ```ts
 import { watch } from 'node:fs'
-import type { Context } from '@luckylillia/plugin-sdk'
+import type { Context } from '@luckylillia-dev/plugin-sdk'
 
 export function watchFile(ctx: Context, filename: string) {
   ctx.effect(() => {
@@ -82,17 +82,17 @@ export function watchFile(ctx: Context, filename: string) {
 
 ### 声明插件包依赖
 
-依赖另一个外部插件时，在 `llbot.dependencies` 里写它的完整 npm 包名和 semver 版本范围。例如 `lucky-lillia-plugin-aiimgdetector` 需要 AI 服务插件 `@luckylillia/plugin-aiprovider`：
+依赖另一个外部插件时，在 `llbot.dependencies` 里写它的完整 npm 包名和 semver 版本范围。例如 `@luckylillia-dev/plugin-aiimgdetector` 需要 AI 服务插件 `@luckylillia-dev/plugin-aiprovider`：
 
 ```json
 {
   "peerDependencies": {
-    "@luckylillia/plugin-sdk": "^1.0.0",
-    "@luckylillia/plugin-aiprovider": "^1.0.0"
+    "@luckylillia-dev/plugin-sdk": "^1.0.0",
+    "@luckylillia-dev/plugin-aiprovider": "^1.0.0"
   },
   "llbot": {
     "dependencies": {
-      "@luckylillia/plugin-aiprovider": "^1.0.0"
+      "@luckylillia-dev/plugin-aiprovider": "^1.0.0"
     },
     "service": { "required": ["bots", "ai", "http"] }
   }
@@ -110,7 +110,7 @@ export function watchFile(ctx: Context, filename: string) {
 一个完整的服务插件入口：
 
 ```ts
-import { Context, Service } from '@luckylillia/plugin-sdk'
+import { Context, Service } from '@luckylillia-dev/plugin-sdk'
 
 declare module 'cordis' {
   interface Context {
@@ -135,8 +135,8 @@ export default class Greetings extends Service {
 
 ### 可选媒体转换
 
-安装并启用 `lucky-lillia-plugin-ffmpeg` 后可以使用 `ctx.ffmpeg`：`probe()` 读取媒体信息、`decodeAudio()` / `encodeAudio()` / `transcodeAudio()` 转换音频、`thumbnail()` 生成 PNG 封面。SDK 导出对应的 `FFmpegAPI`、`FFmpegAudioFormat` 和 `FFmpegMediaInfo` 类型。Bot 不内置这个插件；只有媒体功能需要时，用局部 `ctx.inject(['ffmpeg'], ...)` 挂载这部分，并在不可用时给用户安装提示或使用自己的 fallback。插件全部功能都依赖转换时才放入顶层 `inject` 和必需依赖。
+安装并启用 `@luckylillia-dev/plugin-ffmpeg` 后可以使用 `ctx.ffmpeg`：`probe()` 读取媒体信息、`decodeAudio()` / `encodeAudio()` / `transcodeAudio()` 转换音频、`thumbnail()` 生成 PNG 封面。SDK 导出对应的 `FFmpegAPI`、`FFmpegAudioFormat` 和 `FFmpegMediaInfo` 类型。Bot 不内置这个插件；只有媒体功能需要时，用局部 `ctx.inject(['ffmpeg'], ...)` 挂载这部分，并在不可用时给用户安装提示或使用自己的 fallback。插件全部功能都依赖转换时才放入顶层 `inject` 和必需依赖。
 
 ### 使用外部 AI 服务
 
-AI 由独立插件提供。需要调用时安装服务提供者、声明插件包依赖和 `ai` 服务依赖，再通过 `ctx.ai` 使用；类型、依赖写法和调用示例见 [`@luckylillia/plugin-aiprovider` 的说明](https://github.com/LuckyLilliaDev/lucky-lillia-plugin-aiprovider#readme)中的「给其他插件使用」。
+AI 由独立插件提供。需要调用时安装服务提供者、声明插件包依赖和 `ai` 服务依赖，再通过 `ctx.ai` 使用；类型、依赖写法和调用示例见 [`@luckylillia-dev/plugin-aiprovider` 的说明](https://github.com/LuckyLilliaDev/lucky-lillia-plugin-aiprovider#readme)中的「给其他插件使用」。

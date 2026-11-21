@@ -1,7 +1,7 @@
 import { Context, Service } from 'cordis'
 import type {
   Http, HttpConfig, HttpError as HttpErrorApi, HttpFetchInit, HttpFile, HttpRequestConfig, HttpResponse,
-} from '@luckylillia/plugin-sdk'
+} from '@luckylillia-dev/plugin-sdk'
 
 export class HttpError extends Error implements HttpErrorApi {
   readonly name = 'HttpError' as const

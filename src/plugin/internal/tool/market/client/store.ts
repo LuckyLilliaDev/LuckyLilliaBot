@@ -1,4 +1,4 @@
-import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo, WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo, WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 import { imageUrl, previewImages, type CatalogScreenshot } from '../images'
 
 export type InstalledPackage = PluginInstalledPackage

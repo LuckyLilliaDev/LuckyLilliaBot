@@ -16,7 +16,7 @@ vi.mock('@/plugin/internal/service/webui/FE/components/common', () => ({ showToa
 vi.mock('@/plugin/internal/service/webui/FE/components/plugins/PluginConfigDialog', () => ({ default: () => null }))
 vi.mock('@/plugin/internal/service/webui/FE/components/plugins/LocalInstallDialog', () => ({ default: () => null }))
 
-const name = '@luckylillia/plugin-onebot11'
+const name = '@luckylillia-dev/plugin-onebot11'
 const missing: PluginStatus = {
   id: 'missing-onebot', name, state: 'missing', disabled: false, trusted: false,
   manifest: {}, missingDeps: [], reloadCount: 0, service: { required: [], optional: [], implements: [] },
@@ -26,7 +26,7 @@ beforeEach(() => { view.plugins = [missing] })
 
 describe('missing plugin removal', () => {
   it('offers deletion for an active local plugin even without the market service', () => {
-    view.plugins = [{ ...missing, name: '@luckylillia/plugin-aiprovider', state: 'active', manifest: { title: 'AI 服务' },
+    view.plugins = [{ ...missing, name: '@luckylillia-dev/plugin-aiprovider', state: 'active', manifest: { title: 'AI 服务' },
       removal: { path: 'D:/plugins/development-ai', kind: 'directory' } }]
     expect(renderToStaticMarkup(createElement(PluginsPage))).toContain('aria-label="卸载 AI 服务"')
   })

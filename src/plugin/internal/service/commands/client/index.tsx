@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import {
   SchemaSettings, SelectInput, usePluginContext, usePlugins, type PluginConfigState, type PluginEntryStatus, type WebUIContext, type WebUIPlugin,
-} from '@luckylillia/plugin-sdk/webui'
+} from '@luckylillia-dev/plugin-sdk/webui'
 import { OwnerEditor } from './OwnerEditor'
 
 export const name = 'builtin:commands'

@@ -96,7 +96,7 @@ try {
   assert(ctx!.commands, 'the updated command implementation must provide its actual service')
   ctx!.command('builtin-smoke').action(() => 'ok')
   assert(ctx!.commands.list().some(item => item.name === 'builtin-smoke'))
-  assert(plugins.webuiAsset('@luckylillia+plugin-commands', 'style.css')?.includes('.builtin-packages'))
+  assert(plugins.webuiAsset('@luckylillia-dev+plugin-commands', 'style.css')?.includes('.builtin-packages'))
   console.log('[OK] restart preserved IDs/core restrictions, activated both npm versions and served WebUI shell/assets')
   await stop()
 } catch (error) {

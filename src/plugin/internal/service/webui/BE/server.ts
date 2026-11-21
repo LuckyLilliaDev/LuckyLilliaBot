@@ -9,7 +9,7 @@ import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { serve, ServerType } from '@hono/node-server'
 import { noop } from 'cosmokit'
-import type { FetchHandler, WebUIServer } from '@luckylillia/plugin-sdk'
+import type { FetchHandler, WebUIServer } from '@luckylillia-dev/plugin-sdk'
 
 let feDistPath = path.resolve(import.meta.dirname, 'webui/')
 // @ts-expect-error: TS2339 - Property 'env' does not exist on type 'ImportMeta'

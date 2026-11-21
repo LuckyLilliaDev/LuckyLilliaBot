@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import type { PluginDetailsSource } from '@luckylillia/plugin-sdk/webui'
+import type { PluginDetailsSource } from '@luckylillia-dev/plugin-sdk/webui'
 import { ChevronDown, Loader2, X } from 'lucide-react'
 import { Portal } from '../common'
 import { Lightbox, LightboxImage } from '../common/Lightbox'

@@ -7,7 +7,7 @@ import PluginService, { type BuiltinPlugin } from '@/plugin/host'
 import { BuiltinPackages, packageDigest } from '@/plugin/host/builtin-packages'
 import { builtinRuntimeModule, registerBuiltinRuntime } from '@/plugin/host/builtin-runtime'
 
-const npmName = '@luckylillia/plugin-example'
+const npmName = '@luckylillia-dev/plugin-example'
 const entryName = 'builtin:example'
 const builtin: BuiltinPlugin = { name: entryName, title: 'Example', core: true, manifest: {},
   npm: { name: npmName, version: '1.0.0', abi: 1 }, plugin: { apply() {} } }
@@ -208,8 +208,8 @@ describe('official builtin npm packages', () => {
     expect(await packageDigest(target)).not.toBe(before)
     const shared = { current: 42 }
     registerBuiltinRuntime({ example: { shared } })
-    const namespace = await import(builtinRuntimeModule('@luckylillia/bot-runtime/example')!)
+    const namespace = await import(builtinRuntimeModule('@luckylillia-dev/bot-runtime/example')!)
     expect(namespace.shared).toBe(shared)
-    expect(() => builtinRuntimeModule('@luckylillia/bot-runtime/missing')).toThrow('unavailable')
+    expect(() => builtinRuntimeModule('@luckylillia-dev/bot-runtime/missing')).toThrow('unavailable')
   })
 })

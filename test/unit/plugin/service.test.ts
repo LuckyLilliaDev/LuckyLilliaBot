@@ -5,7 +5,7 @@ import { Context, Fiber, type Message, Service } from 'cordis'
 import TimerService from '@cordisjs/plugin-timer'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Schema from 'schemastery'
-import type { Bot, NeutralEvent } from '@luckylillia/plugin-sdk'
+import type { Bot, NeutralEvent } from '@luckylillia-dev/plugin-sdk'
 import BotsService from '@/universal/bots'
 import PluginService, {
   BuiltinConfig, BuiltinPlugin, PluginForbiddenError, PluginNotFoundError, PluginRevConflictError, PluginStatus,
@@ -87,7 +87,7 @@ afterEach(async () => {
 
 describe('PluginService', () => {
   it.each([false, true])('removes missing package entries and preserves configuration only when requested (%s)', async keepConfig => {
-    const name = '@luckylillia/plugin-onebot11'
+    const name = '@luckylillia-dev/plugin-onebot11'
     const entries = [
       { id: 'missing-a', name, config: { token: 'test-secret', port: 3000 }, scope: { platforms: ['ntqq'] } },
       { id: 'missing-b', name, disabled: true, config: { port: 3001 } },
@@ -242,11 +242,11 @@ describe('PluginService', () => {
 
   it('refuses a package that needs another SDK major', async () => {
     writePlugin(pluginRoot, 'gamma', { 'index.js': `export function apply() {}` }, {
-      peerDependencies: { '@luckylillia/plugin-sdk': '^99.0.0' },
+      peerDependencies: { '@luckylillia-dev/plugin-sdk': '^99.0.0' },
     })
     const plugins = await boot()
     expect(await plugins.enable(byName('gamma').id)).toMatchObject({ state: 'incompatible' })
-    expect(byName('gamma').error).toMatch(/requires @luckylillia\/plugin-sdk \^99\.0\.0, host provides 1\./)
+    expect(byName('gamma').error).toMatch(/requires @luckylillia-dev\/plugin-sdk \^99\.0\.0, host provides 1\./)
   })
 
   it('explains what a pending plugin is waiting for', async () => {

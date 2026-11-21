@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { createTestApp, type TestApp } from '@luckylillia/plugin-sdk/testing'
+import { createTestApp, type TestApp } from '@luckylillia-dev/plugin-sdk/testing'
 import * as plugin from '../src/index.js'
 
 let app: TestApp

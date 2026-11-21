@@ -22,7 +22,7 @@ Bot 表示一个平台上的一个机器人身份，`ctx.bots` 是可迭代的�
 `ctx.bots` 支持 `size`、`get(sid)` 和遍历。后台发送可以使用：
 
 ```ts
-import { h, type Context } from '@luckylillia/plugin-sdk'
+import { h, type Context } from '@luckylillia-dev/plugin-sdk'
 import { Status } from '@satorijs/protocol'
 
 export async function notify(ctx: Context, sid: string, channelId: string, text: string) {
@@ -65,7 +65,7 @@ ID 一律按字符串处理，不能假设可转换为 QQ 号。官方用户和�
 匹配失败时调用 `next` 继续处理；匹配成功后可以消费消息，或回复后继续传递：
 
 ```ts
-import { Context } from '@luckylillia/plugin-sdk'
+import { Context } from '@luckylillia-dev/plugin-sdk'
 
 export const inject = ['bots']
 
@@ -171,7 +171,7 @@ ctx.on('bot/before-send', (bot, channelId, content, next) => {
 在 `inject` 和清单的 `required` 中声明 `commands`，然后使用 `ctx.command(def, description?, config?)`：
 
 ```ts
-import { Context, h } from '@luckylillia/plugin-sdk'
+import { Context, h } from '@luckylillia-dev/plugin-sdk'
 
 export const inject = ['commands']
 

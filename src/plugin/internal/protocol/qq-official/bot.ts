@@ -1,7 +1,7 @@
 import h from '@satorijs/element'
 import { Channel, Status } from '@satorijs/protocol'
 import { Context } from 'cordis'
-import type { Bot, Feature, NeutralResource, SendOptions } from '@luckylillia/plugin-sdk'
+import type { Bot, Feature, NeutralResource, SendOptions } from '@luckylillia-dev/plugin-sdk'
 import type { QQOfficialConfig } from '@/common/types'
 import type { SatoriEvent } from '../../../../universal/types'
 import { ApiError, QQOfficialApi } from './api'

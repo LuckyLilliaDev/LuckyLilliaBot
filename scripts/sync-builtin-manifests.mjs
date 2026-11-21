@@ -21,11 +21,11 @@ for (const category of await readdir(internal, { withFileTypes: true })) {
     const file = path.join(sourceDir, 'package.json')
     const old = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {}
     const manifest = {
-      name: '@luckylillia/plugin-' + dir.name, version: old.version ?? '1.0.0', type: 'module',
+      name: '@luckylillia-dev/plugin-' + dir.name, version: old.version ?? '1.0.0', type: 'module',
       description: details.description.en, main: './lib/index.js', files: ['lib'],
       author: { name: 'LLOneBot', url: 'https://github.com/LLOneBot' }, license: 'GPL-2.0',
       repository: { type: 'git', url: 'git+https://github.com/LLOneBot/LuckyLillia.Bot.git', directory: path.relative(root, sourceDir).split(path.sep).join('/') },
-      engines: { node: '>=22.15' }, peerDependencies: { '@luckylillia/plugin-sdk': '^1.0.0' },
+      engines: { node: '>=22.15' }, peerDependencies: { '@luckylillia-dev/plugin-sdk': '^1.0.0' },
       llbot: { ...details, title,
         builtin: { entry: entryName, abi: 1 },
         ...(['index.ts', 'index.tsx'].some(name => existsSync(path.join(sourceDir, 'client', name))) ? { webui: './lib/client/index.js' } : {}),

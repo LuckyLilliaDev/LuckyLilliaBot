@@ -1,5 +1,5 @@
 import React, { createContext, Fragment, ReactNode, useMemo } from 'react'
-import type { PageView } from '@luckylillia/plugin-sdk/webui'
+import type { PageView } from '@luckylillia-dev/plugin-sdk/webui'
 import { AlertTriangle, Loader2, PowerOff } from 'lucide-react'
 import { pendingReason, pluginTitle, spaced, STATE_LABEL, waitingFor } from '../components/plugins/meta'
 import type { PluginStatus } from '../types/plugins'

@@ -15,7 +15,7 @@
       "@/*": [
         "./src/*"
       ],
-      "@luckylillia/plugin-sdk": [
+      "@luckylillia-dev/plugin-sdk": [
         "./packages/plugin-sdk/src/index.ts"
       ]
     },

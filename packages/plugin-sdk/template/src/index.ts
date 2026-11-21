@@ -1,4 +1,4 @@
-import { Context, h, Schema } from '@luckylillia/plugin-sdk'
+import { Context, h, Schema } from '@luckylillia-dev/plugin-sdk'
 
 export const name = '{{id}}'
 // Services the plugin needs: it runs once they are all there. Keep llbot.service.required in package.json the same

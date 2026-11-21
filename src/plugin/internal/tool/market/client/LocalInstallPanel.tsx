@@ -1,6 +1,6 @@
 import React, { useId, useRef, useState } from 'react'
 import { FileArchive, Loader2, ShieldAlert, Upload, X } from 'lucide-react'
-import { usePluginContext } from '@luckylillia/plugin-sdk/webui'
+import { usePluginContext } from '@luckylillia-dev/plugin-sdk/webui'
 
 interface Props {
   busy: boolean

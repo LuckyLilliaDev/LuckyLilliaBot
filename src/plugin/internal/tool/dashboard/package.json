@@ -1,5 +1,5 @@
 {
-  "name": "@luckylillia/plugin-dashboard",
+  "name": "@luckylillia-dev/plugin-dashboard",
   "version": "1.0.0",
   "type": "module",
   "description": "The front page: uptime and resource usage of LLBot and the machine, and the cards other plugins put there",
@@ -21,7 +21,7 @@
     "node": ">=22.15"
   },
   "peerDependencies": {
-    "@luckylillia/plugin-sdk": "^1.0.0"
+    "@luckylillia-dev/plugin-sdk": "^1.0.0"
   },
   "llbot": {
     "category": "tool",

@@ -2,7 +2,7 @@ import { mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Fiber } from 'cordis'
-import type { PluginStorage } from '@luckylillia/plugin-sdk'
+import type { PluginStorage } from '@luckylillia-dev/plugin-sdk'
 import { normalizePlatformId } from '../../common/platform'
 
 const BUILTIN_PREFIX = 'builtin:'

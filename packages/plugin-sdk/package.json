@@ -1,5 +1,5 @@
 {
-  "name": "@luckylillia/plugin-sdk",
+  "name": "@luckylillia-dev/plugin-sdk",
   "version": "1.0.1",
   "description": "SDK for writing LuckyLillia Bot plugins",
   "type": "module",

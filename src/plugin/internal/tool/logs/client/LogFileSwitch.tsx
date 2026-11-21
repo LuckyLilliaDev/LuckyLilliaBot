@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, FileText, ListFilter, Loader2, Lock } from 'lucide-react'
-import { SelectInput, usePluginContext } from '@luckylillia/plugin-sdk/webui'
+import { SelectInput, usePluginContext } from '@luckylillia-dev/plugin-sdk/webui'
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 

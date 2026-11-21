@@ -1,4 +1,4 @@
-import { Context, Schema } from '@luckylillia/plugin-sdk'
+import { Context, Schema } from '@luckylillia-dev/plugin-sdk'
 import { format } from './format.js'
 
 export const name = 'hello'

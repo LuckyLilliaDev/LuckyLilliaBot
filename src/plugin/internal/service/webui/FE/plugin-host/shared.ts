@@ -26,7 +26,7 @@ export function installSharedModules() {
       'react': React,
       'react/jsx-runtime': jsxRuntime,
       'react-dom': { ...dom, default: dom },
-      '@luckylillia/plugin-sdk/webui': sdk,
+      '@luckylillia-dev/plugin-sdk/webui': sdk,
     },
   }
 }

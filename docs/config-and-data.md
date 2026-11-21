@@ -75,7 +75,7 @@ global 表示当前 Bot 实例内该插件的共享目录，不是整台机器�
 下面保存每个 Bot 上每个用户的偏好：
 
 ```ts
-import { Context, h } from '@luckylillia/plugin-sdk'
+import { Context, h } from '@luckylillia-dev/plugin-sdk'
 
 declare module '@cordisjs/plugin-database' {
   interface Tables {
@@ -126,7 +126,7 @@ export function apply(ctx: Context) {
 声明 `http` 服务依赖后，通过 `ctx.http` 发送请求。内置「代理」为该服务应用代理规则；全局 fetch 不自动使用这些规则。
 
 ```ts
-import { Context, h } from '@luckylillia/plugin-sdk'
+import { Context, h } from '@luckylillia-dev/plugin-sdk'
 
 export const inject = ['commands', 'http']
 

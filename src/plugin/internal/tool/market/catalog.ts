@@ -1,12 +1,13 @@
 import { promisify } from 'node:util'
 import { gunzip } from 'node:zlib'
-import type { PluginCategory } from '@luckylillia/plugin-sdk'
+import type { PluginCategory } from '@luckylillia-dev/plugin-sdk'
 import { PLUGIN_CATEGORIES } from '../../../host/manifest'
 import { isExactVersion, isPackageName, RegistryError, type PackageVersion, type RegistryClient } from './registry'
+import { previousPackageName } from '../../../host/renamed'
 import { readTar } from './tar'
 import { isImageSource, isScreenshot, type CatalogScreenshot } from './images'
 
-export const MARKET_PACKAGE = '@luckylillia/market'
+export const MARKET_PACKAGE = '@luckylillia-dev/market'
 
 export interface CatalogEntry {
   name: string
@@ -140,14 +141,24 @@ export class Catalog {
   }
 
   private async read(): Promise<CatalogSnapshot> {
-    const document = await this.registry.packument(this.name)
-    if (!object(document) || document.name !== this.name || !object(document['dist-tags']) || !object(document.versions)) {
+    let name = this.name
+    let document: Awaited<ReturnType<RegistryClient['packument']>>
+    try {
+      document = await this.registry.packument(name)
+    } catch (e) {
+      // Until the catalog is published under its new name, the one under its old name is the catalog
+      const previous = previousPackageName(name)
+      if (!previous || (e as { status?: number }).status !== 404) throw e
+      name = previous
+      document = await this.registry.packument(name)
+    }
+    if (!object(document) || document.name !== name || !object(document['dist-tags']) || !object(document.versions)) {
       fail('npm 返回的目录包元数据不完整或包名不匹配')
     }
     const latest = document['dist-tags'].latest
     if (!isExactVersion(latest) || !Object.hasOwn(document.versions, latest)) fail('目录包没有有效的 latest 精确版本')
     const version = document.versions[latest]
-    if (!object(version) || version.name !== this.name || version.version !== latest || !object(version.dist)
+    if (!object(version) || version.name !== name || version.version !== latest || !object(version.dist)
       || !webUrl(version.dist.tarball)
       || (version.dist.integrity !== undefined && typeof version.dist.integrity !== 'string')
       || (version.dist.shasum !== undefined && typeof version.dist.shasum !== 'string')

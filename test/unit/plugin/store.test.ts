@@ -78,7 +78,7 @@ describe('PluginStore', () => {
     const file = fresh()
     const store = new PluginStore(file)
     const data = { version: 1 as const, entries: [
-      { id: 'a', name: '@luckylillia/example', config: { owners: ['luckylillia:U1'], platform: 'luckylillia' }, scope: {
+      { id: 'a', name: '@luckylillia-dev/example', config: { owners: ['luckylillia:U1'], platform: 'luckylillia' }, scope: {
         platforms: ['luckylillia', 'ntqq'], bots: ['luckylillia:10000'],
         users: { mode: 'deny' as const, ids: ['luckylillia:U1', 'qq:U1'] },
         guilds: { mode: 'allow' as const, ids: ['luckylillia:G1', 'G2'] },
@@ -95,7 +95,7 @@ describe('PluginStore', () => {
     const { data: loaded, error } = await store.load()
     expect(error).toBeUndefined()
     expect(loaded.entries[0]).toEqual({
-      id: 'a', name: '@luckylillia/example', config: { owners: ['luckylillia:U1'], platform: 'luckylillia' }, scope: {
+      id: 'a', name: '@luckylillia-dev/example', config: { owners: ['luckylillia:U1'], platform: 'luckylillia' }, scope: {
         platforms: ['ntqq'], bots: ['ntqq:10000'],
         users: { mode: 'deny', ids: ['ntqq:U1', 'qq:U1'] },
         guilds: { mode: 'allow', ids: ['ntqq:G1', 'G2'] },

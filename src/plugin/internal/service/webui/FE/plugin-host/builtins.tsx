@@ -1,4 +1,4 @@
-import type { WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import type { WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 
 interface ClientModule {
   /** The builtin entry it belongs to, e.g. `builtin:satori` */

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import type { StyleOptions, ThemeDefinition, ThemeSnapshot, ThemeState, ThemeTokens, ThemeVariant } from '@luckylillia/plugin-sdk/webui'
+import type { StyleOptions, ThemeDefinition, ThemeSnapshot, ThemeState, ThemeTokens, ThemeVariant } from '@luckylillia-dev/plugin-sdk/webui'
 import type { PluginStatus } from '../types/plugins'
 import { useThemeStore } from '../stores/themeStore'
 import { resetGlassAdaptive } from '../utils/glassRuntime'

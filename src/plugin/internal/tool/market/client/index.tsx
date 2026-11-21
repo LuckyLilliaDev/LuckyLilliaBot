@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useSyncExternalStore } from 'react'
-import { usePlugins, type PluginCatalogProps, type PluginCatalogState, type WebUIContext, type WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import { usePlugins, type PluginCatalogProps, type PluginCatalogState, type WebUIContext, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 import LocalInstallPanel from './LocalInstallPanel'
 import { MarketStore } from './store'
 

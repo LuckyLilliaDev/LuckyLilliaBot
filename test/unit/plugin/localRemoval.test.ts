@@ -8,7 +8,7 @@ import PluginService from '@/plugin/host'
 import { createPluginRoutes } from '@/plugin/internal/service/webui/BE/routes/plugins'
 import { scannedPackagePath } from '@/plugin/host/package-location'
 
-const name = '@luckylillia/plugin-aiprovider'
+const name = '@luckylillia-dev/plugin-aiprovider'
 const contexts: Context[] = []
 let work: string
 let root: string

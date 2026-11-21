@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-import type { ThemeMode } from '@luckylillia/plugin-sdk/webui'
+import type { ThemeMode } from '@luckylillia-dev/plugin-sdk/webui'
 
 interface ThemeState {
   mode: ThemeMode

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ArrowUpCircle, Download, Info, Loader2, RotateCw, Settings, Trash2 } from 'lucide-react'
-import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo } from '@luckylillia/plugin-sdk/webui'
+import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo } from '@luckylillia-dev/plugin-sdk/webui'
 import { PluginStatus } from '../../types/plugins'
 import { useRenderFailures } from '../../plugin-host/failures'
 import { useClientErrors } from '../../plugin-host/host'

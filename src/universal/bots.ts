@@ -1,6 +1,6 @@
 import h from '@satorijs/element'
 import { Context, Service } from 'cordis'
-import type { Bot, Bots, NeutralEvent, NeutralResource, SendOptions } from '@luckylillia/plugin-sdk'
+import type { Bot, Bots, NeutralEvent, NeutralResource, SendOptions } from '@luckylillia-dev/plugin-sdk'
 import { applyFallbacks } from './fallback'
 import { Session } from './session'
 

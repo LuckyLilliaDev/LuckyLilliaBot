@@ -76,7 +76,7 @@ export function pendingReason(plugin: PluginStatus, plugins: PluginStatus[]): st
   const off = plugin.missingDeps.map(name => providerOf(name, plugins)).find(provider => provider?.disabled)
   if (off) return `需要先启用「${pluginTitle(off)}」`
   if (plugin.missingDeps.some(name => ['qqProtocol', 'app', 'store', 'ntOnebot'].includes(name))
-    && !providerOf('qqProtocol', plugins)) return '请安装并启用 NTQQ 协议插件（@luckylillia/plugin-nt-protocol）'
+    && !providerOf('qqProtocol', plugins)) return '请安装并启用 NTQQ 协议插件（@luckylillia-dev/plugin-nt-protocol）'
   const labeled = plugin.missingDeps.map(name => plugins.find(item => item.service.labels?.[name])?.service.labels![name])
     .filter((label): label is string => !!label)
   if (labeled.length) return `等待：${[...new Set(labeled)].join('、')}`

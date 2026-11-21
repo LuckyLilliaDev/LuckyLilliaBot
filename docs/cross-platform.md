@@ -123,7 +123,7 @@ if (session.guildId && session.userId && session.bot.muteGuildMember) {
 以下片段中的 `session` 来自消息或事件回调：
 
 ```ts
-import { internalOf } from '@luckylillia/plugin-sdk'
+import { internalOf } from '@luckylillia-dev/plugin-sdk'
 
 const internal = internalOf(session.bot, 'ntqq')
 if (internal && session.guildId && session.userId) {
@@ -158,7 +158,7 @@ NT internal 使用 NTQQ 插件提供的 OneBot 11 账号 action，含 go-cqhttp/
 标准 Bot 方法使用上面的资源 ID；只有调用原始 `internal` 接口时才去掉 `qqguild:` 前缀。例如查询频道的接口权限：
 
 ```ts
-import { internalOf } from '@luckylillia/plugin-sdk'
+import { internalOf } from '@luckylillia-dev/plugin-sdk'
 
 const qq = internalOf(session.bot, 'qq')
 if (qq && session.guildId?.startsWith('qqguild:')) {

@@ -1,6 +1,6 @@
 import h from '@satorijs/element'
 import { Channel } from '@satorijs/protocol'
-import type { NeutralResource } from '@luckylillia/plugin-sdk'
+import type { NeutralResource } from '@luckylillia-dev/plugin-sdk'
 
 const PREFIX = 'qqguild:'
 const DIRECT_PREFIX = 'private:' + PREFIX

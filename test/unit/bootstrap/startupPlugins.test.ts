@@ -4,8 +4,8 @@ import { startupPluginError, startupPluginNames, startRequestedPlugins } from '@
 
 describe('startup plugin arguments', () => {
   it('accepts scoped packages, repeated arguments, comma lists and deduplicates in input order', () => {
-    expect(startupPluginNames(['node', 'llbot.js', '--plugin', '@luckylillia/plugin-nt-protocol', '--plugin=a,b', '--plugin', ' b, @example/c ', '--plugin=a'])).toEqual([
-      '@luckylillia/plugin-nt-protocol', 'a', 'b', '@example/c',
+    expect(startupPluginNames(['node', 'llbot.js', '--plugin', '@luckylillia-dev/plugin-nt-protocol', '--plugin=a,b', '--plugin', ' b, @example/c ', '--plugin=a'])).toEqual([
+      '@luckylillia-dev/plugin-nt-protocol', 'a', 'b', '@example/c',
     ])
   })
   it('leaves other arguments alone and respects the option terminator', () => {

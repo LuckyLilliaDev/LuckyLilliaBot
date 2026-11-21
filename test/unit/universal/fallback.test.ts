@@ -1,7 +1,7 @@
 import h from '@satorijs/element'
 import { Context } from 'cordis'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Bot, Feature } from '@luckylillia/plugin-sdk'
+import type { Bot, Feature } from '@luckylillia-dev/plugin-sdk'
 import BotsService from '@/universal/bots'
 import { fallback, markdownToElements } from '@/universal/fallback'
 

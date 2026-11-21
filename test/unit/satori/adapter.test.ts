@@ -1,6 +1,6 @@
 import { Context, Fiber } from 'cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Bot, NeutralEvent } from '@luckylillia/plugin-sdk'
+import type { Bot, NeutralEvent } from '@luckylillia-dev/plugin-sdk'
 import BotsService from '@/universal/bots'
 import SatoriAdapter from '@/plugin/internal/adapter/satori/adapter'
 

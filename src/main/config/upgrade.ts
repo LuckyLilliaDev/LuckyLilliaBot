@@ -15,9 +15,9 @@ export const DEPRECATED_KEYS = ['onlyLocalhost', 'autoDeleteFile', 'autoDeleteFi
 export const ADAPTER_KEYS = ['ob11', 'satori', 'milky'] as const satisfies readonly (keyof AdapterSections)[]
 
 export const ADAPTER_ENTRIES: Record<keyof AdapterSections, string> = {
-  ob11: '@luckylillia/plugin-onebot11',
+  ob11: '@luckylillia-dev/plugin-onebot11',
   satori: 'builtin:satori',
-  milky: '@luckylillia/plugin-milky',
+  milky: '@luckylillia-dev/plugin-milky',
 }
 
 function readTemplate(onError?: (error: unknown) => void): Dict {

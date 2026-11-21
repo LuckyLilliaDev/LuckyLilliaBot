@@ -23,10 +23,10 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 mkdirSync(path.join(pluginRoot, 'omega'), { recursive: true })
 writeFileSync(path.join(pluginRoot, 'omega', 'package.json'), JSON.stringify({
   name: 'omega', version: '1.0.0', type: 'module', main: 'index.js',
-  peerDependencies: { '@luckylillia/plugin-sdk': '^1.0.0' }, llbot: {},
+  peerDependencies: { '@luckylillia-dev/plugin-sdk': '^1.0.0' }, llbot: {},
 }))
 writeFileSync(path.join(pluginRoot, 'omega', 'index.js'), `
-import { Schema, Service } from '@luckylillia/plugin-sdk'
+import { Schema, Service } from '@luckylillia-dev/plugin-sdk'
 import SchemaDirect from 'schemastery'
 import { text } from './text.js'
 export const Config = Schema.object({ n: Schema.natural().default(1) })

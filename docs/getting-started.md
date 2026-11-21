@@ -4,7 +4,7 @@
 
 ## 准备仓库与 SDK
 
-`@luckylillia/plugin-sdk` 已发布到 npm，可以在[独立目录中开发](testing.md#在仓库外开发)。下面介绍使用 Bot 源码联调的方式：需要 Node.js 22.15 或以上，以及安装好的仓库依赖。仓库使用 Yarn 4 和 `node_modules`；新检出的仓库可先执行：
+`@luckylillia-dev/plugin-sdk` 已发布到 npm，可以在[独立目录中开发](testing.md#在仓库外开发)。下面介绍使用 Bot 源码联调的方式：需要 Node.js 22.15 或以上，以及安装好的仓库依赖。仓库使用 Yarn 4 和 `node_modules`；新检出的仓库可先执行：
 
 ```sh
 # Bot 仓库根目录；需要本机已安装 Corepack
@@ -44,7 +44,7 @@ npm run build
 接下来给插件增加可配置的问候语和 `hello` 指令。以下内容完整替换生成项目的 `src/index.ts`；保留模板的 `package.json`，它已声明 `bots` 和 `commands` 服务。
 
 ```ts
-import { Context, h, Schema } from '@luckylillia/plugin-sdk'
+import { Context, h, Schema } from '@luckylillia-dev/plugin-sdk'
 
 export const name = 'my-plugin'
 export const inject = ['bots', 'commands']

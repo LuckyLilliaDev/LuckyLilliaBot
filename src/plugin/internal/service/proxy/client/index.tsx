@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { SchemaForm, usePluginContext, type ConfigEditorProps, type WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import { SchemaForm, usePluginContext, type ConfigEditorProps, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 
 export const name = 'builtin:proxy'
 

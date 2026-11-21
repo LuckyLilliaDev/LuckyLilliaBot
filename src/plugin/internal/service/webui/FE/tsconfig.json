@@ -7,7 +7,7 @@
       "@/common/types": ["../../../../../common/types"],
       "@/ntqqapi/types": ["../../../../../ntqq/contracts/ntqqapi/types"],
       "@shared/*": ["../../../../../common/*"],
-      "@luckylillia/plugin-sdk/webui": ["../../../../../../packages/plugin-sdk/src/webui.ts"],
+      "@luckylillia-dev/plugin-sdk/webui": ["../../../../../../packages/plugin-sdk/src/webui.ts"],
       "@/*": ["./*"],
       "react": ["./node_modules/@types/react"],
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],

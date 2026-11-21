@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from 'cordis'
-import type { FFmpegAPI } from '@luckylillia/plugin-sdk'
+import type { FFmpegAPI } from '@luckylillia-dev/plugin-sdk'
 import type { QQOfficialApi } from '@/plugin/internal/protocol/qq-official/api'
 import { uploadMedia } from '@/plugin/internal/protocol/qq-official/media'
 import { FileType } from '@/plugin/internal/protocol/qq-official/types'
@@ -31,7 +31,7 @@ describe('QQ official voice with the optional native plugin', () => {
   })
 
   it('reports the missing plugin for WAV and cleans temporary input before uploading', async () => {
-    await expect(uploadMedia(ctx, api, '/v2/groups/g', FileType.Audio, source(wav))).rejects.toThrow('lucky-lillia-plugin-ffmpeg')
+    await expect(uploadMedia(ctx, api, '/v2/groups/g', FileType.Audio, source(wav))).rejects.toThrow('@luckylillia-dev/plugin-ffmpeg')
     expect(api.request).not.toHaveBeenCalled()
     expect(io.rm).toHaveBeenCalledExactlyOnceWith(io.writeFile.mock.calls[0][0], { force: true })
   })

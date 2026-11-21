@@ -1,4 +1,4 @@
-import { Context, Schema } from '@luckylillia/plugin-sdk'
+import { Context, Schema } from '@luckylillia-dev/plugin-sdk'
 
 export const name = 'echo'
 export const inject = ['bots']

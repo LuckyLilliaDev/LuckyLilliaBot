@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Bot, ChevronRight, ExternalLink, KeyRound, Loader2, QrCode, Save } from 'lucide-react'
-import { SchemaForm, usePluginConfig, type WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import { SchemaForm, usePluginConfig, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 import type { QQOfficialConfig } from '../../../../../common/types'
 import { IntentsField } from './IntentsField'
 import ConnectionStatus from './ConnectionStatus'

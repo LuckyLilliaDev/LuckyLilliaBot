@@ -508,8 +508,10 @@
     display: none;
   }
 
-  /* The WebUI's frame around a slot contribution goes with it when it renders nothing; a utility, to beat .flex */
-  .slot-frame:has(> .slot-body:empty) {
+  /* The WebUI's frame around a slot contribution goes with it when it renders nothing; a utility, to beat .flex.
+     A plugin's contribution sits in PluginSurface's display:contents span, which stays when it renders nothing. */
+  .slot-frame:has(> .slot-body:empty),
+  .slot-frame:has(> .slot-body > [data-plugin-ui]:only-child:empty) {
     display: none;
   }
 

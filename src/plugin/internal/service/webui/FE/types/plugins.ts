@@ -74,7 +74,7 @@ export interface PluginAuthor {
 }
 
 /** GET /api/plugins/:id/details */
-export type PluginDetails = import('@luckylillia/plugin-sdk/webui').PluginDetailsContent
+export type PluginDetails = import('@luckylillia-dev/plugin-sdk/webui').PluginDetailsContent
 
 /** Mirrors src/plugin/host/scope.ts */
 export interface IdFilter {

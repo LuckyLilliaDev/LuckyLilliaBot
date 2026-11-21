@@ -10,7 +10,7 @@ import { Context, Fiber } from 'cordis'
 import TimerService from '@cordisjs/plugin-timer'
 import { Hono } from 'hono'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PluginCategory } from '@luckylillia/plugin-sdk'
+import type { PluginCategory } from '@luckylillia-dev/plugin-sdk'
 import PluginService from '@/plugin/host'
 import { createMarketRoutes, Market, MarketError } from '@/plugin/internal/tool/market/index'
 import { readLocalPackage as readArchive } from '@/plugin/internal/tool/market/archive'
@@ -418,7 +418,7 @@ function document(versions: string[], latest = versions.at(-1)!, peer?: Record<s
     name: 'p',
     'dist-tags': { latest },
     versions: Object.fromEntries(versions.map(version => [version, {
-      name: 'p', version, dist: { tarball: '' }, peerDependencies: peer?.[version] ? { '@luckylillia/plugin-sdk': peer[version] } : undefined,
+      name: 'p', version, dist: { tarball: '' }, peerDependencies: peer?.[version] ? { '@luckylillia-dev/plugin-sdk': peer[version] } : undefined,
     }])),
   }
 }
@@ -493,7 +493,7 @@ interface Publish {
   corrupt?: boolean
 }
 
-const CATALOG = '@luckylillia/market'
+const CATALOG = '@luckylillia-dev/market'
 
 /** Serves real registry documents and tarballs, including the catalog package. */
 async function startRegistry() {
@@ -667,7 +667,7 @@ describe('the market', () => {
   const catalogRequests = () => requestsFor(CATALOG).filter(url => decodeURIComponent(url.pathname) === `/${CATALOG}`)
   const installedVersion = (name: string) => JSON.parse(readFileSync(path.join(pluginRoot, name, 'package.json'), 'utf8')).version
   const installLocal = (data: Buffer, filename: string) => market.installLocal(saveLocalArchive(data), filename)
-  const BUILTIN = '@luckylillia/plugin-example'
+  const BUILTIN = '@luckylillia-dev/plugin-example'
   const setupBuiltin = async () => {
     await service?.dispose()
     service = await ctx.plugin(PluginService, {
@@ -736,7 +736,7 @@ describe('the market', () => {
 
     it('selects a compatible npm release and refuses incompatible installed dependencies without changing them', async () => {
       publishPlugin('@example/provider', {}, '1.0.0', { listed: false })
-      publishPlugin('@example/provider', {}, '2.0.0', { listed: false, peerDependencies: { '@luckylillia/plugin-sdk': '>=999.0.0' } })
+      publishPlugin('@example/provider', {}, '2.0.0', { listed: false, peerDependencies: { '@luckylillia-dev/plugin-sdk': '>=999.0.0' } })
       await startRequestedPlugins(ctx, ['@example/provider'], market)
       expect(installedVersion('@example/provider')).toBe('1.0.0')
       publishPlugin('@example/consumer', { '@example/provider': '^2.0.0' }, '1.0.0', { listed: false })
@@ -961,7 +961,7 @@ describe('the market', () => {
     await setupBuiltin()
     publishBuiltin('1.1.0')
     for (let index = 0; index < 25; index++) publishPlugin(`luckylillia-plugin-origin-${index}`)
-    const impostor = '@luckylillia/plugin-impostor'
+    const impostor = '@luckylillia-dev/plugin-impostor'
     publishPlugin(impostor, {}, '1.0.0', { llbot: { builtin: { entry: 'builtin:example', abi: 1 } } })
     expect((await market.search('', 1)).total).toBe(28)
     expect(await market.search('', 1, 'builtin')).toMatchObject({ total: 1, items: [{ name: BUILTIN, builtin: 'builtin:example' }] })
@@ -1177,7 +1177,7 @@ describe('the market', () => {
 
   it('does not bypass catalog requirements for missing plugins or SDK compatibility on a local install', async () => {
     await expect(installLocal(zip(localFiles({ name: PLUGIN, llbot: { dependencies: { unlisted: '^1.0.0' } } })), 'p.zip')).rejects.toThrow(/not found in the plugin market list/)
-    await expect(installLocal(zip(localFiles({ name: PLUGIN, peerDependencies: { '@luckylillia/plugin-sdk': '^999.0.0' } })), 'p.zip')).rejects.toMatchObject({ status: 409 })
+    await expect(installLocal(zip(localFiles({ name: PLUGIN, peerDependencies: { '@luckylillia-dev/plugin-sdk': '^999.0.0' } })), 'p.zip')).rejects.toMatchObject({ status: 409 })
     expect(readdirNames(pluginRoot)).toEqual([])
     expect(status()).toBeUndefined()
   })
@@ -1482,7 +1482,7 @@ describe('the market', () => {
   it('rejects an SDK-incompatible pinned dependency instead of selecting a compatible older version', async () => {
     const dependency = 'luckylillia-plugin-incompatible'
     publishPlugin(dependency)
-    publishPlugin(dependency, {}, '2.0.0', { peerDependencies: { '@luckylillia/plugin-sdk': '^99.0.0' } })
+    publishPlugin(dependency, {}, '2.0.0', { peerDependencies: { '@luckylillia-dev/plugin-sdk': '^99.0.0' } })
     publishPlugin(PLUGIN, { [dependency]: '*' })
 
     await expect(market.install(PLUGIN)).rejects.toMatchObject({ status: 409, message: expect.stringContaining('^99.0.0') })
@@ -1743,7 +1743,7 @@ describe('the market', () => {
     if (problem === 'plugin manifest') registry.publish(dependency, '1.0.0', { listed: true })
     else publishPlugin(dependency, problem === 'cycle' ? { [PLUGIN]: '^2.0.0' } : {}, '1.0.0', {
       listed: problem !== 'unlisted',
-      peerDependencies: problem === 'SDK version' ? { '@luckylillia/plugin-sdk': '^99.0.0' } : undefined,
+      peerDependencies: problem === 'SDK version' ? { '@luckylillia-dev/plugin-sdk': '^99.0.0' } : undefined,
     })
     publishPlugin(PLUGIN, { [dependency]: problem === 'version range' ? '^2.0.0' : '^1.0.0' }, '2.0.0')
     registry.requests.length = 0
@@ -1870,7 +1870,7 @@ describe('the market', () => {
 
   it('blocks an incompatible catalog version, including explicit requests, and preserves the installed plugin', async () => {
     await market.install(PLUGIN)
-    registry.publish(PLUGIN, '2.0.0', { plugin: true, peerDependencies: { '@luckylillia/plugin-sdk': '^99.0.0' }, files: { 'index.js': pluginCode('v3') } })
+    registry.publish(PLUGIN, '2.0.0', { plugin: true, peerDependencies: { '@luckylillia-dev/plugin-sdk': '^99.0.0' }, files: { 'index.js': pluginCode('v3') } })
     registry.requests.length = 0
     await expect(market.install(PLUGIN)).rejects.toMatchObject({ status: 409, message: expect.stringContaining('^99.0.0') })
     const updates = await market.updates()

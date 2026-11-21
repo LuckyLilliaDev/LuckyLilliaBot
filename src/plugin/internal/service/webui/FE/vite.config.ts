@@ -11,7 +11,7 @@ const SHARED_MODULES: Record<string, { file: string; names: () => string[] }> = 
   'react': { file: 'react.js', names: () => Object.keys(require('react')) },
   'react/jsx-runtime': { file: 'react-jsx-runtime.js', names: () => Object.keys(require('react/jsx-runtime')) },
   'react-dom': { file: 'react-dom.js', names: () => Object.keys(require('react-dom')) },
-  '@luckylillia/plugin-sdk/webui': { file: 'plugin-sdk-webui.js', names: () => SDK_EXPORTS },
+  '@luckylillia-dev/plugin-sdk/webui': { file: 'plugin-sdk-webui.js', names: () => SDK_EXPORTS },
 }
 
 function shim(specifier: string, names: string[]): string {
@@ -61,7 +61,7 @@ export default defineConfig({
       '@ntqqapi/types': path.resolve(__dirname, '../../../../../ntqq/types.ts'),
       // Builtin plugins' WebUI (`client/` next to their code, see plugin-host/builtins.ts) is bundled, so its SDK
       // imports go straight to the runtime instead of through the import map
-      '@luckylillia/plugin-sdk/webui': path.resolve(__dirname, 'plugin-host/sdk.tsx'),
+      '@luckylillia-dev/plugin-sdk/webui': path.resolve(__dirname, 'plugin-host/sdk.tsx'),
     },
     // Those clients live outside this package and must get its React, not one found next to them
     dedupe: ['react', 'react-dom', 'lucide-react', 'zustand'],

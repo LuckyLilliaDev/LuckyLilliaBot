@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import type { BotInfo } from '@luckylillia/plugin-sdk/webui'
+import type { BotInfo } from '@luckylillia-dev/plugin-sdk/webui'
 import { apiFetch } from '../utils/api'
 
 /** The accounts plugins chat through, from /api/bots; null until the first answer. */

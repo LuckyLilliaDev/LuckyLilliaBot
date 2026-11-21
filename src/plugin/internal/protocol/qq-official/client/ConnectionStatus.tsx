@@ -1,5 +1,5 @@
 import React from 'react'
-import { useBots, usePluginStatus } from '@luckylillia/plugin-sdk/webui'
+import { useBots, usePluginStatus } from '@luckylillia-dev/plugin-sdk/webui'
 
 // Status of @satorijs/protocol
 const ONLINE = 1

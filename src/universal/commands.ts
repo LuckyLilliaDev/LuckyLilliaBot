@@ -2,7 +2,7 @@ import h from '@satorijs/element'
 import { Context, Service } from 'cordis'
 import type {
   Argv, Bot, Command as CommandApi, CommandAction, CommandConfig, CommandInfo, Commands, OptionConfig, Session, Universal,
-} from '@luckylillia/plugin-sdk'
+} from '@luckylillia-dev/plugin-sdk'
 import type BotsService from './bots'
 import { normalizePlatform, normalizePlatformId } from '../common/platform'
 

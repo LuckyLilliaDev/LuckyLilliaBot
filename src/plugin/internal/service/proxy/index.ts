@@ -1,7 +1,7 @@
 import { Context } from 'cordis'
 import { Hono } from 'hono'
 import { ProxyAgent } from 'undici'
-import type { HttpConfig } from '@luckylillia/plugin-sdk'
+import type { HttpConfig } from '@luckylillia-dev/plugin-sdk'
 import { proxyUrlProblem, ProxySchema, type ProxySettings } from './settings'
 
 /** Answers 204 when it is reachable: the usual test that a proxy gets out */

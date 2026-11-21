@@ -4,10 +4,11 @@ import path from 'node:path'
 import { Context } from 'cordis'
 import { compareVersions } from 'compare-versions'
 import { Context as HonoContext, Hono } from 'hono'
-import type { PluginCategory } from '@luckylillia/plugin-sdk'
+import type { PluginCategory } from '@luckylillia-dev/plugin-sdk'
 import type { PluginStatus, ReloadResult } from '../../../host'
 import type { SharedPackageResult } from '../../../host/shared-packages'
-import { matchesPluginVersion, parsePluginDependencies, PLUGIN_CATEGORIES, SDK_PACKAGE, sdkIncompatibility } from '../../../host/manifest'
+import { matchesPluginVersion, parsePluginDependencies, PLUGIN_CATEGORIES, SDK_PACKAGE, sdkIncompatibility, sdkRangeOf } from '../../../host/manifest'
+import { currentPackageName } from '../../../host/renamed'
 import { SHARED_SPECIFIERS } from '../../../host/resolve-hook'
 import { Catalog, type CatalogEntry, type CatalogSnapshot } from './catalog'
 import { ArchiveError, readLocalPackage } from './archive'
@@ -186,7 +187,7 @@ export class Market {
     const items = category === 'all' ? matching : matching.filter(item => (item.category ?? 'other') === category)
     const start = (Math.max(1, page) - 1) * PAGE_SIZE
     return { total: items.length, categories, items: items.slice(start, start + PAGE_SIZE).map(item => ({
-      ...item, installed: installed.get(item.name), ...builtins.has(item.name) ? { builtin: builtins.get(item.name) } : {},
+      ...item, installed: installed.get(currentPackageName(item.name)), ...builtins.has(item.name) ? { builtin: builtins.get(item.name) } : {},
     })) }
   }
 
@@ -208,7 +209,7 @@ export class Market {
   update(name: string, version: string, currentVersion: string): Promise<InstallOutcome> {
     return this.serial(async () => {
       this.assertManageable(name)
-      const installed = this.installedPackages().find(pkg => pkg.name === name)
+      const installed = this.installedPackages().find(pkg => pkg.name === currentPackageName(name))
       if (!installed) throw new MarketError(`${name} is no longer installed; refresh the plugin market`, 409)
       if (installed.version !== currentVersion) {
         throw new MarketError(`${name} is now ${installed.version}, not ${currentVersion}; refresh the plugin market`, 409)
@@ -243,7 +244,7 @@ export class Market {
   ensureRequested(name: string): Promise<{ names: string[]; installed: InstallOutcome[] }> {
     if (!isPackageName(name)) return Promise.reject(new MarketError('启动插件参数必须是 npm 包名'))
     if (!this.ctx.plugins.packageRootWritable(this.installer.root)) {
-      const existing = this.installedPackages().find(pkg => pkg.name === name)
+      const existing = this.installedPackages().find(pkg => pkg.name === currentPackageName(name))
       if (!existing) return Promise.reject(new MarketError(`${name} 未安装，插件目录为只读，无法自动安装`, 409))
       const main = { name, version: existing.version, dependencies: parsePluginDependencies(existing.manifest.dependencies) }
       return this.planPlugins(main, undefined, undefined, async dependency => {
@@ -251,7 +252,7 @@ export class Market {
       }).then(plan => ({ names: plan.map(item => item.name), installed: [] }))
     }
     return this.serial(async () => {
-      const existing = this.installedPackages().find(pkg => pkg.name === name)
+      const existing = this.installedPackages().find(pkg => pkg.name === currentPackageName(name))
       let main: PlannedPlugin
       if (existing) {
         main = { name, version: existing.version, dependencies: parsePluginDependencies(existing.manifest.dependencies) }
@@ -379,7 +380,7 @@ export class Market {
       const ranges = [range, ...rest.filter(dep => dep.name === name).map(dep => dep.range),
         ...(installedRequirements.get(name) ?? []).map(dep => dep.range)]
       const accepts = (version: string) => ranges.every(range => matchesPluginVersion(version, range))
-      const reuse = installed.get(name)
+      const reuse = installed.get(currentPackageName(name))
       if (reuse) {
         if (!accepts(reuse.version)) {
           conflict = `${parent} needs ${name}@${ranges.join(' and ')}, but ${reuse.version} is already installed; update that plugin first`
@@ -442,7 +443,7 @@ export class Market {
     const chosen = source.manifest
     const { name } = chosen
     const builtin = this.builtin(name)
-    const previous = this.installedPackages().find(pkg => pkg.name === name)?.version
+    const previous = this.installedPackages().find(pkg => pkg.name === currentPackageName(name))?.version
     let instances: SharedPackageResult[] = []
     const result = await this.installer.install(source, async replace => {
       const outcome = await this.ctx.plugins.changePackage({ root: this.installer.root, name, kind: 'install',
@@ -475,7 +476,7 @@ export class Market {
     return this.serial(async () => {
       if (this.builtin(name)) throw new MarketError('内置插件不能卸载', 409)
       this.assertManageable(name)
-      if (!this.ctx.plugins.packageList().some(pkg => pkg.name === name)) throw new MarketError(`${name} is not installed`, 404)
+      if (!this.ctx.plugins.packageList().some(pkg => pkg.name === currentPackageName(name))) throw new MarketError(`${name} is not installed`, 404)
       const removed = this.ctx.plugins.list().filter(entry => entry.name === name).map(entry => entry.id)
       const { instances } = await this.ctx.plugins.changePackage({ root: this.installer.root, name, kind: 'uninstall',
         keepConfig: options.keepConfig }, () => this.installer.uninstall(name))
@@ -498,7 +499,7 @@ export class Market {
     if (!this.installer.target(name)) throw new MarketError(`invalid package name ${name}`)
     const builtin = this.builtin(name)
     if (builtin && !builtin.root) return
-    const pkg = builtin ?? this.ctx.plugins.packageList().find(pkg => pkg.name === name)
+    const pkg = builtin ?? this.ctx.plugins.packageList().find(pkg => pkg.name === currentPackageName(name))
     if (pkg?.root && !this.manages(pkg.name, pkg.root)) {
       throw new MarketError(`${name} is at ${pkg.root}, outside the market's directory ${this.installer.root}; it leaves that copy alone`, 409)
     }
@@ -512,7 +513,7 @@ export class Market {
   private incompatibility(version: PackageManifest): string | undefined {
     const builtinProblem = this.ctx.plugins.checkBuiltinPackage(version.name, version)
     if (builtinProblem) return builtinProblem
-    const problem = sdkIncompatibility(version.peerDependencies?.[SDK_PACKAGE], this.ctx.plugins.hostSdk())
+    const problem = sdkIncompatibility(sdkRangeOf(version.peerDependencies), this.ctx.plugins.hostSdk())
     return problem && `${version.version} ${problem}`
   }
 }

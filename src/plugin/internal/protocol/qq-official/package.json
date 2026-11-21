@@ -1,5 +1,5 @@
 {
-  "name": "@luckylillia/plugin-qq-official",
+  "name": "@luckylillia-dev/plugin-qq-official",
   "version": "1.0.0",
   "type": "module",
   "description": "Runs a QQ open platform bot (AppID login) that plugins can chat through as well",
@@ -21,7 +21,7 @@
     "node": ">=22.15"
   },
   "peerDependencies": {
-    "@luckylillia/plugin-sdk": "^1.0.0"
+    "@luckylillia-dev/plugin-sdk": "^1.0.0"
   },
   "llbot": {
     "category": "protocol",

@@ -1,6 +1,6 @@
 /** Private runtime imports for official packages. Shared values keep native state and service classes singular. */
 const KEY = Symbol.for('luckylillia.builtin-runtime.v1')
-const PREFIX = '@luckylillia/bot-runtime/'
+const PREFIX = '@luckylillia-dev/bot-runtime/'
 type RuntimeModules = Record<string, Record<string, unknown>>
 
 export function registerBuiltinRuntime(modules: RuntimeModules): void {

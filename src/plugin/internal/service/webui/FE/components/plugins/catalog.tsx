@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import type { PluginCatalogProps, PluginCatalogState } from '@luckylillia/plugin-sdk/webui'
+import type { PluginCatalogProps, PluginCatalogState } from '@luckylillia-dev/plugin-sdk/webui'
 import { PluginBoundary } from '../../plugin-host/context'
 import { contributionKey, type SlotContribution } from '../../plugin-host/registry'
 import { useSlotContents } from '../../plugin-host/views'

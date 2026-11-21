@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
-import type { FFmpegAPI } from '@luckylillia/plugin-sdk';
-export type { FFmpegAudioFormat as AudioFormat, FFmpegMediaInfo as MediaInfo } from '@luckylillia/plugin-sdk';
-export declare const FFMPEG_PLUGIN = "lucky-lillia-plugin-ffmpeg";
+import type { FFmpegAPI } from '@luckylillia-dev/plugin-sdk';
+export type { FFmpegAudioFormat as AudioFormat, FFmpegMediaInfo as MediaInfo } from '@luckylillia-dev/plugin-sdk';
+export declare const FFMPEG_PLUGIN = "@luckylillia-dev/plugin-ffmpeg";
 export declare class FFmpegUnavailableError extends Error {
     readonly code = "FFMPEG_PLUGIN_MISSING";
     constructor(message?: string);

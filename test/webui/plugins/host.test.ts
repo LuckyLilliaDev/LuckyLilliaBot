@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import type { WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 import { ensureClient, hasExternalClient, refreshBuiltinClients, startBuiltinClients, syncClients, useClientErrors } from '@/plugin/internal/service/webui/FE/plugin-host/host'
 import { BUILTIN_CLIENTS } from '@/plugin/internal/service/webui/FE/plugin-host/builtins'
 import { useRegistry } from '@/plugin/internal/service/webui/FE/plugin-host/registry'

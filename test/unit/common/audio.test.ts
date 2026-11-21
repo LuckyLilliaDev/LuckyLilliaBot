@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from 'cordis'
-import type { FFmpegAPI } from '@luckylillia/plugin-sdk'
+import type { FFmpegAPI } from '@luckylillia-dev/plugin-sdk'
 import * as ffmpeg from '@/common/utils/ffmpeg'
 import { isSilk, isWav } from '@/common/utils/audioFormat'
 

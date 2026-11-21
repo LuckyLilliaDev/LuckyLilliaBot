@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import type { BotInfo } from '@luckylillia/plugin-sdk/webui'
+import type { BotInfo } from '@luckylillia-dev/plugin-sdk/webui'
 import { useBots } from '../../stores/botsStore'
 
 // Status of @satorijs/protocol

@@ -1,6 +1,6 @@
 import React from 'react'
 import { AlertTriangle } from 'lucide-react'
-import type { FieldProps } from '@luckylillia/plugin-sdk/webui'
+import type { FieldProps } from '@luckylillia-dev/plugin-sdk/webui'
 import type { QQOfficialIntent } from '../../../../../common/types'
 
 const INTENT_GROUPS: { title: string; intents: { value: QQOfficialIntent; label: string; hint: string }[] }[] = [

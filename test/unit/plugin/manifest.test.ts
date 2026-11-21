@@ -83,7 +83,7 @@ describe('plugin package dependencies', () => {
       .toEqual({ '@scope/gateway': '^1.2.0 || >=2.0.0 <3', renderer: '*' })
     pkg('consumer-package', {
       name: 'consumer-package', type: 'module', dependencies: { library: '^1.0.0' },
-      peerDependencies: { '@luckylillia/plugin-sdk': '^1.0.0', types: '^2.0.0' },
+      peerDependencies: { '@luckylillia-dev/plugin-sdk': '^1.0.0', types: '^2.0.0' },
       llbot: { dependencies: { '@scope/gateway': '^1.2.0' } },
     })
     expect((await readPluginPackage(path.join(root, 'consumer-package')))!.manifest.dependencies)

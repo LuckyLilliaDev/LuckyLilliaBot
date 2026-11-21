@@ -1,5 +1,5 @@
 {
-  "name": "@luckylillia/plugin-satori",
+  "name": "@luckylillia-dev/plugin-satori",
   "version": "1.0.0",
   "type": "module",
   "description": "Supports all protocol backends through Satori",
@@ -21,7 +21,7 @@
     "node": ">=22.15"
   },
   "peerDependencies": {
-    "@luckylillia/plugin-sdk": "^1.0.0"
+    "@luckylillia-dev/plugin-sdk": "^1.0.0"
   },
   "llbot": {
     "category": "adapter",

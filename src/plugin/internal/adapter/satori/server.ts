@@ -1,6 +1,6 @@
 import * as Universal from '@satorijs/protocol'
 import { Context } from 'cordis'
-import type { Bot } from '@luckylillia/plugin-sdk'
+import type { Bot } from '@luckylillia-dev/plugin-sdk'
 import { WebSocket, WebSocketServer } from 'ws'
 import { implemented, neutralContent, neutralPlatform, toWire } from './wire'
 import type SatoriAdapter from './adapter'

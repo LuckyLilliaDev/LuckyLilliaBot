@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ThemeDefinition } from '@luckylillia/plugin-sdk/webui'
+import type { ThemeDefinition } from '@luckylillia-dev/plugin-sdk/webui'
 import type { PluginStatus } from '@/plugin/internal/service/webui/FE/types/plugins'
 
 const storage = vi.hoisted(() => {

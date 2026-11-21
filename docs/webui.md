@@ -6,8 +6,8 @@
 
 | 上下文 | 导入来源 | 用途 |
 |---|---|---|
-| 后端 `Context` | `@luckylillia/plugin-sdk` | 使用 `ctx.bots` 等服务、读写文件、注册 HTTP 接口 |
-| 前端 `WebUIContext` | `@luckylillia/plugin-sdk/webui` | 注册页面和插槽，通过 SDK 或 HTTP 获取后端数据 |
+| 后端 `Context` | `@luckylillia-dev/plugin-sdk` | 使用 `ctx.bots` 等服务、读写文件、注册 HTTP 接口 |
+| 前端 `WebUIContext` | `@luckylillia-dev/plugin-sdk/webui` | 注册页面和插槽，通过 SDK 或 HTTP 获取后端数据 |
 
 两者都由宿主传给各自的 `apply(ctx)`；React 组件中用 `usePluginContext()` 获取前端上下文。浏览器不能直接调用后端的 `ctx.bots` 或文件系统。例如，前端的 `useBots()` 返回用于展示的账号信息，不是可以发送消息的后端 `Bot` 对象。
 
@@ -27,7 +27,7 @@
 
 ```js
 import { createElement } from 'react'
-import { SchemaSettings, useBots } from '@luckylillia/plugin-sdk/webui'
+import { SchemaSettings, useBots } from '@luckylillia-dev/plugin-sdk/webui'
 
 function BotsPage() {
   const bots = useBots()
@@ -39,7 +39,7 @@ function BotsPage() {
   )
 }
 
-/** @param {import('@luckylillia/plugin-sdk/webui').WebUIContext} ctx */
+/** @param {import('@luckylillia-dev/plugin-sdk/webui').WebUIContext} ctx */
 export default function apply(ctx) {
   ctx.page({ id: 'bots', title: '账号列表', icon: 'users', component: BotsPage })
   ctx.page({ id: 'settings', title: '示例设置', component: SchemaSettings, settings: true })
@@ -92,7 +92,7 @@ WebUI 自身是内置插件 `builtin:webui`。主题、侧边栏、监听地址�
 
 ## 前端 SDK
 
-从 `@luckylillia/plugin-sdk/webui` 导入以下 Hook 和组件，完整类型见 [webui.ts](../packages/plugin-sdk/src/webui.ts)。
+从 `@luckylillia-dev/plugin-sdk/webui` 导入以下 Hook 和组件，完整类型见 [webui.ts](../packages/plugin-sdk/src/webui.ts)。
 
 **读取状态和控制布局：**
 
@@ -147,7 +147,7 @@ WebUI 自身是内置插件 `builtin:webui`。主题、侧边栏、监听地址�
 `usePluginConfig<T>()` 返回 `value`（加载前为 `null`）、`setValue`、`schema`、`error`、`errors`、`saving`、`save` 和 `clearSecret`。`setValue()` 只修改草稿，调用 `save()` 才提交：
 
 ```tsx
-import { usePluginConfig } from '@luckylillia/plugin-sdk/webui'
+import { usePluginConfig } from '@luckylillia-dev/plugin-sdk/webui'
 
 export function SettingsPage() {
   const config = usePluginConfig<{ greeting: string }>()
@@ -177,7 +177,7 @@ export function SettingsPage() {
 下面的控件对应后端的 `Schema.string().role('color')`：
 
 ```tsx
-import type { FieldProps, WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import type { FieldProps, WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 
 function ColorField({ value, onChange, error }: FieldProps<string>) {
   return <label>
@@ -231,14 +231,14 @@ export default function apply(ctx) {
 
 ```js
 import { createElement } from 'react'
-import { useBots } from '@luckylillia/plugin-sdk/webui'
+import { useBots } from '@luckylillia-dev/plugin-sdk/webui'
 
 function OnlineCount() {
   const bots = useBots()
   return createElement('p', null, '在线账号：' + (bots?.filter(bot => bot.status === 1).length ?? 0))
 }
 
-/** @param {import('@luckylillia/plugin-sdk/webui').WebUIContext} ctx */
+/** @param {import('@luckylillia-dev/plugin-sdk/webui').WebUIContext} ctx */
 export default function apply(ctx) {
   ctx.slot('dashboard.cards', {
     id: 'online-count', title: '账号状态', icon: 'users',
@@ -283,11 +283,11 @@ Dashboard 的 `size` 可为 `normal`、`wide`、`full`，约占三分之一、�
 
 `plugins.install` 的组件始终显示在「本地安装」弹框的真实目录与扫描按钮下方，不再使用上传/扫描标签切换。成功后调用 `onInstalled()`，由宿主刷新列表、清空全部筛选并回到「已安装」。实际目录由宿主接口读取，扫描也由宿主提供；市场停用时仍可查看目录和扫描。
 
-`plugins.views` 的 `configAction(id)` 接收插件条目 ID，返回 `{ open(): void; label: string }` 或 `undefined`。可以从 `usePlugins()` 取得条目，使用返回的 `label` 绘制按钮，点击时调用 `open()`，由宿主打开与插件列表齿轮相同的配置弹框或设置页；没有动作时隐藏按钮。同包多实例应先让用户选择条目 ID，不能把 npm 包名当作 ID。`PluginsViewProps` 类型从 `@luckylillia/plugin-sdk/webui` 导入。
+`plugins.views` 的 `configAction(id)` 接收插件条目 ID，返回 `{ open(): void; label: string }` 或 `undefined`。可以从 `usePlugins()` 取得条目，使用返回的 `label` 绘制按钮，点击时调用 `open()`，由宿主打开与插件列表齿轮相同的配置弹框或设置页；没有动作时隐藏按钮。同包多实例应先让用户选择条目 ID，不能把 npm 包名当作 ID。`PluginsViewProps` 类型从 `@luckylillia-dev/plugin-sdk/webui` 导入。
 
 `showDetails(source)` 打开与插件列表 Info 相同的详情弹框，也可展示未安装的包。`source` 使用 SDK 的 `PluginDetailsSource`：必填 `name`、`title`，可选 `version`、`description`、`author`、`icon`、`iconUrl`、`screenshots` 和异步 `load()`。`title` 和作者等信息固定在弹框顶部，不随正文滚动；其下始终先显示 `description` 简介，再显示截图。简介立即展示，不等待详情加载。不提供 `load()` 时直接复用已有元数据，未安装卡片使用目录中的内容，不显示加载动画。需要另行读取详情时，`load()` 返回 `PluginDetailsContent`：`{ markdown?, base, screenshots }`，其中 `base` 是 Markdown 相对图片路径的 URL 基准目录，带结尾斜杠；无 Markdown 时可用空字符串。宿主负责异步加载状态、失败提示与重试，以及图片放大；非空 Markdown 保留在截图之后默认折叠的「完整说明」中，用户点击展开，不替换简介。若 Markdown 的第一个内容块是一级标题，详情中省略该块，避免重复显示主标题；后续标题和其他内容保留。
 
-`PluginMetaRow` 从 `@luckylillia/plugin-sdk/webui` 导入，可复用宿主卡片的元数据行。必填 `title`，可选 `category`、`author: { name, url? }`、`packageName`、`repository`、`className`；分类使用 `llbot.category` 的分类值，缺省显示「其他」，省略包名或仓库地址则隐藏对应链接。通过 `children` 添加紧跟包/仓库链接的内容，例如 Info 按钮；链接与附加内容组成不拆行的一组。组件只展示传入的数据，不发起请求。
+`PluginMetaRow` 从 `@luckylillia-dev/plugin-sdk/webui` 导入，可复用宿主卡片的元数据行。必填 `title`，可选 `category`、`author: { name, url? }`、`packageName`、`repository`、`className`；分类使用 `llbot.category` 的分类值，缺省显示「其他」，省略包名或仓库地址则隐藏对应链接。通过 `children` 添加紧跟包/仓库链接的内容，例如 Info 按钮；链接与附加内容组成不拆行的一组。组件只展示传入的数据，不发起请求。
 
 ### 贡献的标识、顺序与错误处理
 
@@ -315,11 +315,11 @@ WebQQ 插槽的 props 使用以下专用数据结构，不是后端 `Session`：
 希望其他插件扩展自己的页面时，使用 `<插件>.<位置>` 命名插槽，向 `SlotMap` 合并类型，并在页面中用 `Slot` 渲染：
 
 ```tsx
-import { Slot, type WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import { Slot, type WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 
 interface Item { id: string; title: string }
 
-declare module '@luckylillia/plugin-sdk/webui' {
+declare module '@luckylillia-dev/plugin-sdk/webui' {
   interface SlotMap {
     'my-plugin.item.actions': { props: { item: Item }; options: {} }
   }
@@ -357,7 +357,7 @@ export default function apply(ctx: WebUIContext) {
 前端需要读取业务数据或执行操作时，在后端注入 `webuiServer`，用带 `fetch` 方法的对象注册 HTTP 接口：
 
 ```ts
-import { Context } from '@luckylillia/plugin-sdk'
+import { Context } from '@luckylillia-dev/plugin-sdk'
 
 export const inject = ['webuiServer']
 
@@ -395,7 +395,7 @@ export function apply(ctx: Context) {
 
 ### 共享依赖与构建
 
-宿主通过 import map 提供 `react`、`react/jsx-runtime`、`react-dom` 和 `@luckylillia/plugin-sdk/webui`。打包时四者必须设为 `external`，避免混入另一份 React 导致 Hook 错误；其他依赖可以打包：
+宿主通过 import map 提供 `react`、`react/jsx-runtime`、`react-dom` 和 `@luckylillia-dev/plugin-sdk/webui`。打包时四者必须设为 `external`，避免混入另一份 React 导致 Hook 错误；其他依赖可以打包：
 
 ```ts
 import { defineConfig } from 'vite'
@@ -405,7 +405,7 @@ export default defineConfig({
     outDir: 'webui',
     lib: { entry: 'client/index.tsx', formats: ['es'], fileName: () => 'index.js' },
     rollupOptions: {
-      external: ['react', 'react/jsx-runtime', 'react-dom', '@luckylillia/plugin-sdk/webui'],
+      external: ['react', 'react/jsx-runtime', 'react-dom', '@luckylillia-dev/plugin-sdk/webui'],
     },
   },
 })

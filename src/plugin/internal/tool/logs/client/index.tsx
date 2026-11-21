@@ -1,4 +1,4 @@
-import { type WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import { type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 import LogViewer from './LogViewer'
 
 export const name = 'builtin:logs'

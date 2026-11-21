@@ -13,7 +13,7 @@ import { setConfigLogLevel, getLogLevel, bindLoggerFactory, getLogger } from '@/
 import LoggerConsole from '@cordisjs/plugin-logger-console'
 import TimerService from '@cordisjs/plugin-timer'
 import ConfigService from './config'
-import { liftBuiltinSettings, migrateToInstances, renameNativeQQSettings, migrateExtractedPlugins, migrateNTQQMessaging } from './config/migrate'
+import { liftBuiltinSettings, migrateToInstances, renameNativeQQSettings, migrateExtractedPlugins, migrateNTQQMessaging, migrateRenamedPackages } from './config/migrate'
 import { lockInstance } from './instanceLock'
 import { currentInstance, InstanceChoice } from '@/common/instance'
 import { configPaths } from '@/common/configPaths'
@@ -84,6 +84,8 @@ async function onLoad() {
     instance = currentInstance()
     await lockInstance(instance.name)
     // Under the lock, so two processes cannot both rewrite this instance's files
+    // First: the migrations after it find the plugins by their new names
+    migrateRenamedPackages(ctx.logger('config'))
     liftBuiltinSettings(ctx.logger('config'))
     renameNativeQQSettings(ctx.logger('config'))
     migrateExtractedPlugins(ctx.logger('config'))

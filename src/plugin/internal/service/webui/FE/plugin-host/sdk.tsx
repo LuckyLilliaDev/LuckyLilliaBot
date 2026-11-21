@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, ExternalLink, Loader2, Save } from 'lucide-r
 import type {
   BotInfo, DurationInputProps, PageView, PathInputProps, PluginConfigState, PluginEntryStatus, SchemaFormProps,
   SchemaSettingsProps, SelectInputProps, SlotMap, SlotProps, StatusNoticeProps,
-} from '@luckylillia/plugin-sdk/webui'
+} from '@luckylillia-dev/plugin-sdk/webui'
 import { HostSelector } from '../components/common/HostSelector'
 import { PathPicker } from '../components/common/PathPicker'
 import { DurationPicker } from '../components/common/DurationPicker'
@@ -22,7 +22,7 @@ import { usePluginContext } from './context'
 import { usePluginList } from './pluginList'
 import { PageNotice, PageViewContext, SlotOutlet, useSlotMatches } from './views'
 
-// The runtime side of `@luckylillia/plugin-sdk/webui`: what third-party modules get through the import map and
+// The runtime side of `@luckylillia-dev/plugin-sdk/webui`: what third-party modules get through the import map and
 // builtin ones through the alias in vite.config.ts. Keep its exports in step with sdkExports.ts.
 
 export { usePluginContext, useSlotMatches, PluginIcon }

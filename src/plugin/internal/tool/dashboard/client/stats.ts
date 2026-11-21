@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { usePluginContext, type WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import { usePluginContext, type WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 
 /** `/api/dashboard/stats`: the bot process and the machine. */
 export interface DashboardStats {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Terminal, Trash2, Pause, Play, ArrowDown } from 'lucide-react'
-import { usePluginContext } from '@luckylillia/plugin-sdk/webui'
+import { usePluginContext } from '@luckylillia-dev/plugin-sdk/webui'
 import LogFileSwitch from './LogFileSwitch'
 
 interface LogRecord {

@@ -55,12 +55,12 @@ describe('plugin routes', () => {
   })
 
   it.each([false, true])('removes missing package entries with the selected configuration retention (%s)', async keepConfig => {
-    plugins.get.mockReturnValue(status('a', { name: '@luckylillia/plugin-onebot11', state: 'missing' }))
+    plugins.get.mockReturnValue(status('a', { name: '@luckylillia-dev/plugin-onebot11', state: 'missing' }))
     expect(await json(await app.request('/api/plugins/a/remove-missing', { method: 'POST', body: JSON.stringify({ keepConfig }) }))).toEqual({
       status: 200, body: { success: true, data: { removed: ['a', 'b'] } },
     })
     expect(plugins.scan).toHaveBeenCalledOnce()
-    expect(plugins.removePackage).toHaveBeenCalledWith('@luckylillia/plugin-onebot11', { keepConfig, missingOnly: true })
+    expect(plugins.removePackage).toHaveBeenCalledWith('@luckylillia-dev/plugin-onebot11', { keepConfig, missingOnly: true })
   })
 
   it('rejects invalid configuration retention before changing any entries', async () => {

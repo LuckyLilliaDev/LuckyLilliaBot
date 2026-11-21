@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PluginDetailsSource, PluginsViewProps } from '@luckylillia/plugin-sdk/webui'
+import type { PluginDetailsSource, PluginsViewProps } from '@luckylillia-dev/plugin-sdk/webui'
 import { ArrowLeft, ChevronLeft, ChevronRight, FileUp, Loader2, Puzzle, RefreshCw, Search, X } from 'lucide-react'
 import { usePluginList } from '../../plugin-host/pluginList'
 import { SlotOutlet, useSettingsPages, useSlotContents } from '../../plugin-host/views'

@@ -23,7 +23,7 @@ describe('optional FFmpeg service', () => {
     expect(getFFmpegAddon().version()).toBe('first')
     expect((await getFFmpegAddon().probe('x')).format).toBe('first')
     await first.dispose()
-    expect(() => getFFmpegAddon()).toThrow(/lucky-lillia-plugin-ffmpeg/)
+    expect(() => getFFmpegAddon()).toThrow(/@luckylillia-dev\/plugin-ffmpeg/)
     await ctx.plugin(provider('updated'))
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(getFFmpegAddon().version()).toBe('updated')

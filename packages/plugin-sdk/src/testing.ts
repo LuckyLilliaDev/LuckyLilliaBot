@@ -1,4 +1,4 @@
-// `@luckylillia/plugin-sdk/testing`: the declarations. The code is the bot's own neutral layer (BotsService, Session,
+// `@luckylillia-dev/plugin-sdk/testing`: the declarations. The code is the bot's own neutral layer (BotsService, Session,
 // the fallbacks, the commands) with a fake bot, bundled into lib/testing.js by scripts/build-testing.mjs.
 import type { Context } from 'cordis'
 import type { Bot, Feature, NeutralEvent } from './universal.js'

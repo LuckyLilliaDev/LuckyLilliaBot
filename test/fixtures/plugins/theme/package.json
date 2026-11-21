@@ -4,7 +4,7 @@
   "type": "module",
   "main": "index.js",
   "description": "WebUI 主题及界面扩展能力示例",
-  "peerDependencies": { "@luckylillia/plugin-sdk": "^1.0.1" },
+  "peerDependencies": { "@luckylillia-dev/plugin-sdk": "^1.0.1" },
   "llbot": {
     "title": "主题能力示例",
     "category": "theme",

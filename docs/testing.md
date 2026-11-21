@@ -33,18 +33,18 @@ npx tsx watch --exclude "./data/**" --exclude "/path/to/plugins/**" src/main/mai
 可以直接使用 npm 上的 SDK 和脚手架，无需克隆 Bot 仓库：
 
 ```sh
-npx -p @luckylillia/plugin-sdk luckylillia-plugin create my-plugin
+npx -p @luckylillia-dev/plugin-sdk luckylillia-plugin create my-plugin
 cd my-plugin
 npm install
 npm run build
 npm test
 ```
 
-需要联调尚未发布的 SDK 源码时，先在 Bot 仓库运行 `npm run build:sdk`，再将插件的 `devDependencies.@luckylillia/plugin-sdk` 改为 `file:<Bot仓库>/packages/plugin-sdk` 并重新安装依赖。将 `<Bot仓库>` 替换为实际路径，含空格时给参数加引号。保留 `peerDependencies` 中的 SDK 兼容版本；file 路径仅用于本地开发依赖。
+需要联调尚未发布的 SDK 源码时，先在 Bot 仓库运行 `npm run build:sdk`，再将插件的 `devDependencies.@luckylillia-dev/plugin-sdk` 改为 `file:<Bot仓库>/packages/plugin-sdk` 并重新安装依赖。将 `<Bot仓库>` 替换为实际路径，含空格时给参数加引号。保留 `peerDependencies` 中的 SDK 兼容版本；file 路径仅用于本地开发依赖。
 
 ## 测试
 
-`@luckylillia/plugin-sdk/testing` 使用宿主的消息、Session、指令、HTTP、默认降级逻辑和只记录发送结果的假 Bot。适合验证消息匹配、参数、元素、平台分支和数据分区。下面的完整测试对应[带配置和指令的示例](getting-started.md#带配置和指令的示例)。
+`@luckylillia-dev/plugin-sdk/testing` 使用宿主的消息、Session、指令、HTTP、默认降级逻辑和只记录发送结果的假 Bot。适合验证消息匹配、参数、元素、平台分支和数据分区。下面的完整测试对应[带配置和指令的示例](getting-started.md#带配置和指令的示例)。
 
 ### 完整测试文件
 
@@ -52,7 +52,7 @@ npm test
 
 ```ts
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { createTestApp, type TestApp } from '@luckylillia/plugin-sdk/testing'
+import { createTestApp, type TestApp } from '@luckylillia-dev/plugin-sdk/testing'
 import * as plugin from '../src/index.js'
 
 let app: TestApp

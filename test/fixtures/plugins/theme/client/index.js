@@ -1,6 +1,6 @@
 import { createElement as h, useState } from 'react'
 import ReactDOM from 'react-dom'
-import { useTheme } from '@luckylillia/plugin-sdk/webui'
+import { useTheme } from '@luckylillia-dev/plugin-sdk/webui'
 
 function ThemeStatus() {
   const theme = useTheme()

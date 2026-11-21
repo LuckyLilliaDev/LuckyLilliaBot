@@ -1,6 +1,6 @@
 import React, { useRef } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { SelectInput, useBots } from '@luckylillia/plugin-sdk/webui'
+import { SelectInput, useBots } from '@luckylillia-dev/plugin-sdk/webui'
 import { formatOwner, parseOwner, type OwnerRow } from './owners'
 
 interface OwnerEditorProps {

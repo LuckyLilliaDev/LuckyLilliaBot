@@ -1,4 +1,4 @@
-import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo } from '@luckylillia/plugin-sdk/webui'
+import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo } from '@luckylillia-dev/plugin-sdk/webui'
 import type { PluginStatus } from '../../types/plugins'
 import type { CatalogSource } from './catalog'
 import { CATEGORIES, needsAttention, type CategoryKey, type OriginFilter, type StatusFilter } from './listing'

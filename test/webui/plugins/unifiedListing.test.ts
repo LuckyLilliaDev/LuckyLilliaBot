@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PluginCatalogItem, PluginCatalogState, PluginInstalledPackage } from '@luckylillia/plugin-sdk/webui'
+import type { PluginCatalogItem, PluginCatalogState, PluginInstalledPackage } from '@luckylillia-dev/plugin-sdk/webui'
 import type { CatalogSource } from '@/plugin/internal/service/webui/FE/components/plugins/catalog'
 import {
   filterPluginItems, isInstalled, itemBuiltin, itemCategory, itemName, mergePluginItems, type PluginFilters,
@@ -48,7 +48,7 @@ describe('unified plugin list', () => {
   })
 
   it.each([true, false])('matches builtin package names without adding a second card (packageName=%s)', withPackageName => {
-    const packageName = '@luckylillia/commands'
+    const packageName = '@luckylillia-dev/commands'
     const local = plugin('builtin:commands', { builtin: true, packageName: withPackageName ? packageName : undefined })
     const remote = entry(packageName, { builtin: local.name })
     const pkg = installed(packageName, { builtin: local.name })
@@ -134,12 +134,12 @@ describe('unified plugin list', () => {
       plugin('reply', { manifest: { category: 'chat' } }),
       plugin('paused', { disabled: true, state: 'disposed', manifest: { category: 'chat' } }),
     ], [source({
-      installed: [installed('@luckylillia/commands', { builtin: 'builtin:commands' }), installed('reply'), installed('paused')],
+      installed: [installed('@luckylillia-dev/commands', { builtin: 'builtin:commands' }), installed('reply'), installed('paused')],
       items: [entry('fresh', { category: 'tool' }), entry('unknown', { category: 'custom' })],
-      updates: { '@luckylillia/commands': { update: '2.0.0' }, reply: { update: '2.0.0' }, paused: { latest: '2.0.0', blocked: 'SDK mismatch' } },
+      updates: { '@luckylillia-dev/commands': { update: '2.0.0' }, reply: { update: '2.0.0' }, paused: { latest: '2.0.0', blocked: 'SDK mismatch' } },
     })])
     const select = (patch: Partial<PluginFilters>) => filterPluginItems(items, { ...filters, ...patch }).map(itemName)
-    expect(select({ installation: 'installed', origin: 'builtin', updatesOnly: true })).toEqual(['@luckylillia/commands'])
+    expect(select({ installation: 'installed', origin: 'builtin', updatesOnly: true })).toEqual(['@luckylillia-dev/commands'])
     expect(select({ installation: 'installed', origin: 'third-party', category: 'chat', status: 'enabled', updatesOnly: true })).toEqual(['reply'])
     expect(select({ installation: 'installed', status: 'disabled' })).toEqual(['paused'])
     expect(select({ installation: 'uninstalled', origin: 'third-party', category: 'tool' })).toEqual(['fresh'])

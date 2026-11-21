@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Loader2, MessagesSquare, RotateCcw, Save } from 'lucide-react'
-import { PluginIcon, usePluginContext, usePlugins, type PluginEntryStatus, type WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import { PluginIcon, usePluginContext, usePlugins, type PluginEntryStatus, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 
 export const name = 'builtin:message-order'
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync } from 'node:fs'
 import path from 'node:path'
 
-export const ntqqPackage = '@luckylillia/plugin-nt-protocol'
+export const ntqqPackage = '@luckylillia-dev/plugin-nt-protocol'
 export const defaultNTQQPlugin = root => path.resolve(root, '../LuckyLillia.Plugins/lucky-lillia-plugin-ntqq-protocol')
 
 export function nativeBundleRoot(directory) {

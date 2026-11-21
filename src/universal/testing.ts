@@ -5,7 +5,7 @@ import h from '@satorijs/element'
 import { Channel } from '@satorijs/protocol'
 import { Context } from 'cordis'
 import TimerService from '@cordisjs/plugin-timer'
-import type { Feature, NeutralEvent, NeutralResource, SendOptions } from '@luckylillia/plugin-sdk'
+import type { Feature, NeutralEvent, NeutralResource, SendOptions } from '@luckylillia-dev/plugin-sdk'
 import type {
   MessageOptions, SentMessage, TestApp as TestAppApi, TestBot as TestBotApi, TestBotOptions,
 } from '../../packages/plugin-sdk/src/testing'
@@ -13,7 +13,7 @@ import BotsService from './bots'
 import { CommandService, DEFAULT_SETTINGS, type CommandSettings } from './commands'
 import HttpService from './http'
 
-// @luckylillia/plugin-sdk/testing (bundled by packages/plugin-sdk/scripts/build-testing.mjs): the neutral layer as
+// @luckylillia-dev/plugin-sdk/testing (bundled by packages/plugin-sdk/scripts/build-testing.mjs): the neutral layer as
 // the bot runs it, with a bot that only records what it is asked to send
 
 class TestBot implements TestBotApi {

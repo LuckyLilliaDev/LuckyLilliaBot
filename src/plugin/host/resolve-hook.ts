@@ -3,7 +3,7 @@ import { builtinRuntimeModule } from './builtin-runtime'
 
 /** Packages a plugin must share with the host: a second copy of cordis breaks services and events. */
 export const SHARED_SPECIFIERS = [
-  '@luckylillia/plugin-sdk',
+  '@luckylillia-dev/plugin-sdk',
   'cordis',
   'cosmokit',
   'schemastery',
@@ -19,6 +19,11 @@ export interface ResolverState {
   roots: string[]
 }
 
+/** What plugins published before the move to @luckylillia-dev import, and the shared package it is now. */
+export const LEGACY_SPECIFIERS: Readonly<Record<string, (typeof SHARED_SPECIFIERS)[number]>> = {
+  '@luckylillia/plugin-sdk': '@luckylillia-dev/plugin-sdk',
+}
+
 export function sharedSpecifierMap(): Map<string, string> {
   const map = new Map<string, string>()
   for (const specifier of SHARED_SPECIFIERS) {
@@ -27,6 +32,10 @@ export function sharedSpecifierMap(): Map<string, string> {
     } catch {
       // e.g. the SDK is not built yet in a fresh checkout
     }
+  }
+  for (const [legacy, current] of Object.entries(LEGACY_SPECIFIERS)) {
+    const url = map.get(current)
+    if (url) map.set(legacy, url)
   }
   return map
 }

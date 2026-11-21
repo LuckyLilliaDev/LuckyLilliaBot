@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it, vi } from 'vitest'
 import { Catalog, MARKET_PACKAGE } from '@/plugin/internal/tool/market/catalog'
-import { Registry, verify, type Packument, type PackageVersion, type RegistryClient } from '@/plugin/internal/tool/market/registry'
+import { Registry, RegistryError, verify, type Packument, type PackageVersion, type RegistryClient } from '@/plugin/internal/tool/market/registry'
 import { MarketSchema, marketSettings } from '@/plugin/internal/tool/market/settings'
 
 interface File { path: string; text?: string; bytes?: Buffer; type?: string }
@@ -65,6 +65,28 @@ describe('npm directory catalog', () => {
     expect([...await catalog.load()]).toEqual([[plugin.name, plugin]])
     expect(registry.packument.mock.calls).toEqual([[MARKET_PACKAGE]])
     expect(registry.tarball).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the catalog under its old name until it is published as @luckylillia-dev/market', async () => {
+    const { registry, document } = fixture(files(), '@luckylillia/market')
+    registry.packument.mockImplementation(async (name: string) => {
+      if (name === MARKET_PACKAGE) throw new RegistryError(`${name} not found on https://registry.example`, 404)
+      return document
+    })
+    const catalog = new Catalog(registry, MARKET_PACKAGE)
+    expect([...await catalog.load()]).toEqual([[plugin.name, plugin]])
+    expect(registry.packument.mock.calls).toEqual([[MARKET_PACKAGE], ['@luckylillia/market']])
+  })
+
+  it('falls back to the old catalog name only when the new one does not exist', async () => {
+    const { registry } = fixture(files(), '@luckylillia/market')
+    registry.packument.mockRejectedValue(new RegistryError('registry unavailable', undefined))
+    await expect(new Catalog(registry, MARKET_PACKAGE).load()).rejects.toThrow('registry unavailable')
+    expect(registry.packument).toHaveBeenCalledTimes(1)
+    registry.packument.mockClear()
+    registry.packument.mockRejectedValue(new RegistryError('@company/catalog not found', 404))
+    await expect(new Catalog(registry, '@company/catalog').load()).rejects.toThrow('not found')
+    expect(registry.packument).toHaveBeenCalledTimes(1)
   })
 
   it('accepts an empty catalog and a configured catalog package', async () => {

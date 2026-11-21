@@ -2,7 +2,7 @@ import { createServer, IncomingHttpHeaders, Server } from 'node:http'
 import { AddressInfo } from 'node:net'
 import { Context } from 'cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { HttpConfig, HttpFetchInit } from '@luckylillia/plugin-sdk'
+import type { HttpConfig, HttpFetchInit } from '@luckylillia-dev/plugin-sdk'
 import HttpService from '@/universal/http'
 import { PNG } from '../examples/fakeAi'
 

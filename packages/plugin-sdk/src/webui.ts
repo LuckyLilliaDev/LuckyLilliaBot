@@ -62,7 +62,7 @@ export type SlotCardinality = 'list' | 'single' | 'keyed' | 'chain' | 'hoc'
  * with. Names are dotted paths of where they are: `dashboard.cards`, `webqq.chat.actions`. A plugin declaring one
  * (`ctx.declareSlot`) adds it here by declaration merging, for the plugins filling it to type against:
  *
- *     declare module '@luckylillia/plugin-sdk/webui' {
+ *     declare module '@luckylillia-dev/plugin-sdk/webui' {
  *       interface SlotMap { 'my-plugin.item.actions': { props: { item: Item }; options: {} } }
  *     }
  *

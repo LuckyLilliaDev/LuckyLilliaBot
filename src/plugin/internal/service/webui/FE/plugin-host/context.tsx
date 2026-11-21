@@ -1,7 +1,7 @@
 import React, { createContext, ReactNode, Suspense, useContext } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import type { ComponentType } from 'react'
-import type { ApiOptions, WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import type { ApiOptions, WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 import { showToast } from '../components/common'
 import { pluginTitle } from '../components/plugins/meta'
 import { apiFetch, authorizedFetch, getToken } from '../utils/api'
@@ -13,7 +13,7 @@ import { useThemeStore } from '../stores/themeStore'
 
 const PluginContext = createContext<WebUIContext | null>(null)
 
-/** `usePluginContext` of `@luckylillia/plugin-sdk/webui`. */
+/** `usePluginContext` of `@luckylillia-dev/plugin-sdk/webui`. */
 export function usePluginContext(): WebUIContext {
   const ctx = useContext(PluginContext)
   if (!ctx) throw new Error('usePluginContext() only works inside a component a plugin registered')

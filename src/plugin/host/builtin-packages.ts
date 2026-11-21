@@ -3,9 +3,9 @@ import { cp, lstat, mkdir, readdir, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { valid, gt } from 'semver'
-import type { LLBotManifest } from '@luckylillia/plugin-sdk'
+import type { LLBotManifest } from '@luckylillia-dev/plugin-sdk'
 import { JsonFile } from '../../common/jsonFile'
-import { isInside, readPluginPackage, sdkIncompatibility, SDK_PACKAGE, type PluginPackage } from './manifest'
+import { isInside, readPluginPackage, sdkIncompatibility, sdkRangeOf, type PluginPackage } from './manifest'
 import type { BuiltinPlugin } from './index'
 
 /** Increment when changing the private imports used by the official bundled packages. */
@@ -79,7 +79,7 @@ export class BuiltinPackages {
     if (!valid(manifest.version) || !gt(manifest.version, builtin.npm!.version)) {
       return `Built-in override must be newer than bundled version ${builtin.npm!.version}`
     }
-    return sdkIncompatibility(manifest.peerDependencies?.[SDK_PACKAGE], sdkVersion)
+    return sdkIncompatibility(sdkRangeOf(manifest.peerDependencies), sdkVersion)
   }
 
   /** Called only after a catalog-approved archive has passed integrity checks and installation. */

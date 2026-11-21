@@ -3,7 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SDK_EXPORTS } from '@/plugin/internal/service/webui/FE/plugin-host/sdkExports'
 
-// What `@luckylillia/plugin-sdk/webui` declares, what the WebUI supplies, and what the import map shim re-exports.
+// What `@luckylillia-dev/plugin-sdk/webui` declares, what the WebUI supplies, and what the import map shim re-exports.
 // Read from the source: the runtime module pulls in the WebUI, which needs a DOM.
 const read = (file: string) => readFileSync(path.resolve(import.meta.dirname, '../../..', file), 'utf8')
 

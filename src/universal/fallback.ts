@@ -1,6 +1,6 @@
 import h from '@satorijs/element'
 import type { Context } from 'cordis'
-import type { Bot, Feature } from '@luckylillia/plugin-sdk'
+import type { Bot, Feature } from '@luckylillia-dev/plugin-sdk'
 
 // The elements beyond Satori's that a plugin may send to any bot (packages/plugin-sdk Feature): a bot that does not
 // declare one gets its fallback, made of standard elements only

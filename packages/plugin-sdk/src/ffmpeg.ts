@@ -1,6 +1,6 @@
 import type { Buffer } from 'node:buffer'
 
-/** Formats supported by the optional lucky-lillia-plugin-ffmpeg package. */
+/** Formats supported by the optional @luckylillia-dev/plugin-ffmpeg package. */
 export type FFmpegAudioFormat = 'mp3' | 'amr' | 'wma' | 'm4a' | 'spx' | 'ogg' | 'wav' | 'flac' | 'silk'
 
 export interface FFmpegMediaInfo {

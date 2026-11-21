@@ -1,6 +1,6 @@
 import h from '@satorijs/element'
 import { Methods } from '@satorijs/protocol'
-import type { Bot } from '@luckylillia/plugin-sdk'
+import type { Bot } from '@luckylillia-dev/plugin-sdk'
 
 // Satori clients have always seen the NT account as `llonebot`, with its own elements `llonebot:*` and faces marked
 // `platform="llonebot"`; the NTQQ protocol plugin registers it as `ntqq`. Everything else goes

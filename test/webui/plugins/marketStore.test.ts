@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WebUIContext } from '@luckylillia/plugin-sdk/webui'
+import type { WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
 import { MarketStore, type InstalledPackage, type UpdateInfo } from '@/plugin/internal/tool/market/client/store'
 
 const interval = 10 * 60_000

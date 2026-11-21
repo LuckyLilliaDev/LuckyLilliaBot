@@ -4,6 +4,7 @@ import { Context } from 'cordis'
 import type { PluginStatus } from '@/plugin/host'
 import { Market } from '@/plugin/internal/tool/market/index'
 import { isPackageName, Registries } from '@/plugin/internal/tool/market/registry'
+import { currentPackageName } from '@/plugin/host/renamed'
 import { MarketSchema, registriesOf, type MarketSettings } from '@/plugin/internal/tool/market/settings'
 
 /** Only npm names: repeat --plugin, or put several comma-separated names in one value. */
@@ -20,7 +21,8 @@ export function startupPluginNames(argv: readonly string[] = process.argv): stri
     for (const part of value.split(',')) {
       const name = part.trim()
       if (!isPackageName(name)) throw new Error('--plugin 只接受 npm 包名，不接受版本、路径或 URL')
-      names.add(name)
+      // Launch commands written before the move to @luckylillia-dev keep working
+      names.add(currentPackageName(name))
     }
     if (names.size > 128) throw new Error('--plugin 最多指定 128 个插件包')
   }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ArrowUpRight, Bot, Loader2, MessageSquare, Send } from 'lucide-react'
-import { usePluginContext, usePluginStatus } from '@luckylillia/plugin-sdk/webui'
+import { usePluginContext, usePluginStatus } from '@luckylillia-dev/plugin-sdk/webui'
 import type { QQOfficialStats } from '../statsTypes'
 
 const GLYPH = 'text-white drop-shadow-[0_1px_1.4px_rgba(0,0,0,0.5)]'

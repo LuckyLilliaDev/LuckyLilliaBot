@@ -10,6 +10,7 @@ import { mergeNewProperties } from '@/common/utils'
 import { newEntryId, PluginEntry, PluginsFile } from '../../plugin/host/store'
 import { adapterDefaults } from './defaultConfig'
 import { ADAPTER_ENTRIES, ADAPTER_KEYS, templateConfig, upgradeConfig } from './upgrade'
+import { RENAMED_PACKAGES } from '../../plugin/host/renamed'
 
 export interface MigrationLog {
   info(...args: unknown[]): void
@@ -104,7 +105,7 @@ export function migrateToInstances(log: MigrationLog) {
 function keepLoginMethod(plugins: Dict | undefined): Dict {
   if (plugins && !Array.isArray(plugins.entries)) return plugins
   const file = (plugins ?? { version: 1, entries: [] }) as unknown as PluginsFile
-  if (!file.entries.some(entry => entry?.name === 'builtin:nt-protocol' || entry?.name === '@luckylillia/plugin-nt-protocol')) {
+  if (!file.entries.some(entry => entry?.name === 'builtin:nt-protocol' || entry?.name === '@luckylillia-dev/plugin-nt-protocol')) {
     const id = newEntryId(new Set(file.entries.map(entry => entry?.id)))
     file.entries.push({ id, name: 'builtin:nt-protocol', config: { mode: 'direct', protocol: 'linux' } })
   }
@@ -139,7 +140,7 @@ export function liftBuiltinSettings(log: MigrationLog) {
   }
   if (email) {
     const { enabled, ...config } = email
-    setEntry(file, '@luckylillia/plugin-ntqq-offline-email', config, !!enabled)
+    setEntry(file, '@luckylillia-dev/plugin-ntqq-offline-email', config, !!enabled)
   }
   writeJson(pluginsFile, file as unknown as Dict)
   if (sections.length) writeJson(settingsFile, settings!)
@@ -156,7 +157,7 @@ export function renameNativeQQSettings(log: MigrationLog) {
   const pluginsFile = configPaths.plugins()
   const plugins = readJson(log, pluginsFile)?.value as PluginsFile | undefined
   if (!Array.isArray(plugins?.entries)) return
-  const config = plugins.entries.find(item => item?.name === 'builtin:nt-protocol' || item?.name === '@luckylillia/plugin-nt-protocol')?.config as Dict | undefined
+  const config = plugins.entries.find(item => item?.name === 'builtin:nt-protocol' || item?.name === '@luckylillia-dev/plugin-nt-protocol')?.config as Dict | undefined
   if (!config || typeof config !== 'object' || (config.mode !== 'pmhq' && !('pmhq' in config))) return
   if (config.mode === 'pmhq') config.mode = 'nativeqq'
   if ('pmhq' in config) {
@@ -168,11 +169,11 @@ export function renameNativeQQSettings(log: MigrationLog) {
 }
 
 export const EXTRACTED_PLUGINS: Readonly<Record<string, string>> = {
-  'builtin:nt-protocol': '@luckylillia/plugin-nt-protocol',
-  'builtin:onebot11': '@luckylillia/plugin-onebot11',
-  'builtin:milky': '@luckylillia/plugin-milky',
-  'builtin:email-notification': '@luckylillia/plugin-ntqq-offline-email',
-  'builtin:webqq': '@luckylillia/plugin-webqq',
+  'builtin:nt-protocol': '@luckylillia-dev/plugin-nt-protocol',
+  'builtin:onebot11': '@luckylillia-dev/plugin-onebot11',
+  'builtin:milky': '@luckylillia-dev/plugin-milky',
+  'builtin:email-notification': '@luckylillia-dev/plugin-ntqq-offline-email',
+  'builtin:webqq': '@luckylillia-dev/plugin-webqq',
 }
 
 /** NTQQ messaging is owned by the protocol package now; the old core entry has no independent settings. */
@@ -264,6 +265,77 @@ export function migrateExtractedPlugins(log: MigrationLog) {
   for (const name of extracted) {
     const duplicates = data.entries.filter(entry => entry?.name === name && !entry.disabled)
     if (duplicates.length > 1) log.warn(`${name} 存在多个启用条目（${duplicates.map(entry => entry.id).join('、')}），配置均已保留；请在插件页选择要使用的条目并停用其他条目`)
+  }
+}
+
+/**
+ * The packages that moved to @luckylillia-dev (2026-11-20, plugin/host/renamed.ts): their entries, saved entries,
+ * trust and WebUI keys, and their data directories go from the old names to the new. Packages still installed
+ * under the old names load as the new ones until they are updated, so nothing has to be reinstalled now. Runs at
+ * every start, before the migrations that look for the plugins by their new names; a directory both names have is
+ * left for the user to merge.
+ */
+export function migrateRenamedPackages(log: MigrationLog) {
+  const renamed = (name: unknown) => typeof name === 'string' && Object.hasOwn(RENAMED_PACKAGES, name) ? RENAMED_PACKAGES[name] : undefined
+  const file = configPaths.plugins()
+  const data = readJson(log, file)?.value as PluginsFile | undefined
+  if (Array.isArray(data?.entries)) {
+    const moved = new Set<string>()
+    let changed = false
+    for (const entry of [...data.entries, ...(Array.isArray(data.retained) ? data.retained : [])]) {
+      const next = entry && typeof entry === 'object' ? renamed(entry.name) : undefined
+      if (!next) continue
+      moved.add(`${entry.name} → ${next}`)
+      entry.name = next
+      changed = true
+    }
+    if (Array.isArray(data.trusted)) {
+      const trusted = [...new Set(data.trusted.map(name => renamed(name) ?? name))]
+      if (!deepEqual(trusted, data.trusted)) {
+        data.trusted = trusted
+        changed = true
+      }
+    }
+    // WebUI keys are `<package>|<kind>|<id>`
+    const uiKey = (key: string) => {
+      const split = key.indexOf('|')
+      const name = split < 0 ? key : key.slice(0, split)
+      const next = renamed(name)
+      return next ? next + key.slice(name.length) : key
+    }
+    if (data.ui && typeof data.ui === 'object' && !Array.isArray(data.ui)) {
+      if (Array.isArray(data.ui.hidden)) {
+        const hidden = data.ui.hidden.map(key => typeof key === 'string' ? uiKey(key) : key)
+        if (!deepEqual(hidden, data.ui.hidden)) {
+          data.ui.hidden = hidden
+          changed = true
+        }
+      }
+      const order = data.ui.order
+      for (const [key, position] of Object.entries(order && typeof order === 'object' && !Array.isArray(order) ? order : {})) {
+        const next = uiKey(key)
+        if (next === key) continue
+        if (!Object.hasOwn(order, next)) order[next] = position
+        delete order[key]
+        changed = true
+      }
+    }
+    if (changed) {
+      writeJson(file, data as unknown as Dict)
+      log.info(`插件已改用 @luckylillia-dev 包名，设置随之迁移：${[...moved].join('、') || '信任与界面设置'}。旧包名的已装插件照常使用，在插件市场更新后换成新包`)
+    }
+  }
+  const root = configPaths.pluginData()
+  for (const [previous, current] of Object.entries(RENAMED_PACKAGES)) {
+    const from = path.join(root, previous.replace('/', '+'))
+    const to = path.join(root, current.replace('/', '+'))
+    if (!existsSync(from)) continue
+    if (existsSync(to)) {
+      log.warn(`插件 ${current} 的数据目录已存在，旧包名 ${previous} 的数据仍在 ${path.relative(DATA_DIR, from)}，需要的话请手动合并`)
+      continue
+    }
+    renameSync(from, to)
+    log.info(`插件数据已从 ${path.relative(DATA_DIR, from)} 移到 ${path.relative(DATA_DIR, to)}`)
   }
 }
 

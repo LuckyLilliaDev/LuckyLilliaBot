@@ -1,5 +1,5 @@
 import React from 'react'
-import { SchemaSettings, type WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import { SchemaSettings, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 
 export const name = 'builtin:satori'
 

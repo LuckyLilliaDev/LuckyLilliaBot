@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import type { WebUIPlugin } from '@luckylillia/plugin-sdk/webui'
+import type { WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 import { PluginStatus } from '../types/plugins'
 import { BUILTIN_CLIENTS } from './builtins'
 import { createWebUIContext } from './context'

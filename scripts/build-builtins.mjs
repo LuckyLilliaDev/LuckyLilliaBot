@@ -15,7 +15,7 @@ const requireFrontend = createRequire(path.join(fe, 'package.json'))
 const postcss = requireFrontend('postcss')
 const tailwind = requireFrontend('@tailwindcss/postcss')
 const rootPackage = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
-const sharedPackages = new Set(['@luckylillia/plugin-sdk', 'cordis', 'cosmokit', 'schemastery', '@standard-schema/spec', '@satorijs/element', '@satorijs/protocol'])
+const sharedPackages = new Set(['@luckylillia-dev/plugin-sdk', 'cordis', 'cosmokit', 'schemastery', '@standard-schema/spec', '@satorijs/element', '@satorijs/protocol'])
 const isInside = (dir, file) => file === dir || file.startsWith(dir + path.sep)
 const entries = []
 for (const category of await readdir(internal, { withFileTypes: true })) {
@@ -56,13 +56,13 @@ for (const dir of entries) {
           if (!isInside(path.join(root, 'src'), resolved.path) || owns(resolved.path)) return
           const key = path.relative(path.join(root, 'src'), resolved.path).split(path.sep).join('/')
           shared.set(key, resolved.path)
-          return { path: '@luckylillia/bot-runtime/' + key, external: true }
+          return { path: '@luckylillia-dev/bot-runtime/' + key, external: true }
         })
       },
     }],
   })
   const dependencies = new Set(Object.values(backend.metafile.outputs).flatMap(output => output.imports)
-    .map(item => item.path).filter(specifier => !isBuiltin(specifier) && !specifier.startsWith('@luckylillia/bot-runtime/'))
+    .map(item => item.path).filter(specifier => !isBuiltin(specifier) && !specifier.startsWith('@luckylillia-dev/bot-runtime/'))
     .map(specifier => specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0])
     .filter(specifier => !sharedPackages.has(specifier)))
   manifest.dependencies = Object.fromEntries([...dependencies].sort().map(name => {
@@ -77,7 +77,7 @@ for (const dir of entries) {
       platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic', minify: true,
       nodePaths: [path.join(fe, 'node_modules')],
       alias: { '@ntqqapi/types': path.join(root, 'src/ntqq/types.ts') },
-      external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@luckylillia/plugin-sdk/webui'],
+      external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@luckylillia-dev/plugin-sdk/webui'],
       define: { 'process.env.NODE_ENV': '"production"' },
     })
     // An independently updated client can use utility classes that the older shell never compiled.
@@ -118,6 +118,6 @@ await writeFile(path.join(internal, 'runtime-imports.ts'), imports)
 
 // WebUI itself is an updatable core package, including the complete shell it serves.
 await viteBuild({ configFile: path.join(fe, 'vite.config.ts'), root: fe,
-  build: { outDir: path.join(destination, '@luckylillia/plugin-webui/lib/webui'), emptyOutDir: true },
+  build: { outDir: path.join(destination, '@luckylillia-dev/plugin-webui/lib/webui'), emptyOutDir: true },
 })
 console.log('Built ' + entries.length + ' builtin npm packages in ' + destination)

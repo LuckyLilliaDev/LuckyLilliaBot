@@ -1,6 +1,6 @@
 import * as Universal from '@satorijs/protocol'
 import { Service, Context } from 'cordis'
-import type { Bot } from '@luckylillia/plugin-sdk'
+import type { Bot } from '@luckylillia-dev/plugin-sdk'
 import { SatoriConfig } from '@/common/types'
 import { SatoriServer } from './server'
 import { featuresOf, toWire, wirePlatform } from './wire'

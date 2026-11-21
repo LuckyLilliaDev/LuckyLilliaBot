@@ -1,6 +1,6 @@
 import h from '@satorijs/element'
 import { Channel } from '@satorijs/protocol'
-import type { Bot, EventName, NeutralEvent, NeutralResource, Session as SessionApi } from '@luckylillia/plugin-sdk'
+import type { Bot, EventName, NeutralEvent, NeutralResource, Session as SessionApi } from '@luckylillia-dev/plugin-sdk'
 import type BotsService from './bots'
 
 export class Session implements SessionApi {

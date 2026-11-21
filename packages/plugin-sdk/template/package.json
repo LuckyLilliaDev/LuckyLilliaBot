@@ -17,11 +17,11 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@luckylillia/plugin-sdk": "^{{sdk}}"
+    "@luckylillia-dev/plugin-sdk": "^{{sdk}}"
   },
   "devDependencies": {
     "@cordisjs/plugin-timer": "^1.1.4",
-    "@luckylillia/plugin-sdk": "^{{sdk}}",
+    "@luckylillia-dev/plugin-sdk": "^{{sdk}}",
     "@satorijs/element": "^3.2.0",
     "@satorijs/protocol": "^1.7.0",
     "cordis": "4.0.0-rc.11",

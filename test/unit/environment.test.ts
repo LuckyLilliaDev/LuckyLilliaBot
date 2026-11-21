@@ -121,12 +121,12 @@ describe('the protocol in effect', () => {
     process.env = realEnv
   })
 
-  it('follows the selection of the NT protocol plugin, macOS by default', () => {
-    expect(getProtocol()).toBe('macos')
-    setProtocolSelection(direct('linux'))
+  it('follows the selection of the NT protocol plugin, Linux by default', () => {
     expect(getProtocol()).toBe('linux')
     setProtocolSelection(direct('macos'))
     expect(getProtocol()).toBe('macos')
+    setProtocolSelection(direct('linux'))
+    expect(getProtocol()).toBe('linux')
     expect(isNativeQQMode()).toBe(false)
   })
 

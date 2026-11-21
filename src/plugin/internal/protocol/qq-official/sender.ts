@@ -1,5 +1,5 @@
 import h from '@satorijs/element'
-import type { NeutralResource } from '@luckylillia/plugin-sdk'
+import type { NeutralResource } from '@luckylillia-dev/plugin-sdk'
 import { privateTarget } from './decode'
 import { fallback } from '../../../../universal/fallback'
 import {

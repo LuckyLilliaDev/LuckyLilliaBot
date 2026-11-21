@@ -73,7 +73,7 @@ export default defineConfig({
     target: 'node22',
     rolldownOptions: {
       platform: 'node',
-      external: [...external, '@luckylillia/plugin-sdk', ...builtinModules, /^node:/],
+      external: [...external, '@luckylillia-dev/plugin-sdk', ...builtinModules, /^node:/],
       // llbot.js is the small supervisor every launcher runs; it runs the bot, llbot-core.js, as a child
       input: { llbot: 'src/main/llbot.ts', 'llbot-core': 'src/main/main.ts' },
       output: {
@@ -85,10 +85,10 @@ export default defineConfig({
         cp({
           targets: [
             ...external.map(genCpModule),
-            { src: './packages/plugin-sdk/lib', dest: 'dist/node_modules/@luckylillia/plugin-sdk/lib', flatten: false },
-            { src: './packages/plugin-sdk/package.json', dest: 'dist/node_modules/@luckylillia/plugin-sdk/' },
+            { src: './packages/plugin-sdk/lib', dest: 'dist/node_modules/@luckylillia-dev/plugin-sdk/lib', flatten: false },
+            { src: './packages/plugin-sdk/package.json', dest: 'dist/node_modules/@luckylillia-dev/plugin-sdk/' },
             { src: './output/builtin-packages', dest: 'dist/builtin-plugins', flatten: false },
-            { src: './output/builtin-packages/@luckylillia/plugin-webui/lib/webui', dest: 'dist/webui', flatten: false },
+            { src: './output/builtin-packages/@luckylillia-dev/plugin-webui/lib/webui', dest: 'dist/webui', flatten: false },
             { src: './src/main/config/default_config.json', dest: 'dist/' },
             { src: './package-dist.json', dest: 'dist/', rename: 'package.json' },
             { src: './doc/使用说明.txt', dest: 'dist/' },
