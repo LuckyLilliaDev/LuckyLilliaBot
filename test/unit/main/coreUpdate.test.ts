@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CORE_PACKAGE, CoreUpdater, createCoreUpdateRoutes, replaceInstall, updateBlocker, WORK_DIR } from '@/main/coreUpdate'
+import { CORE_PACKAGE, CoreUpdater, createCoreUpdateRoutes, GITHUB_REPO, releasePageUrl, replaceInstall, scheduleAutoCheck, updateBlocker, WORK_DIR } from '@/main/coreUpdate'
 import { failedRuntimeDir, runtimeDir } from '@/main/runtime'
 import { RegistryError, type PackageVersion, type Packument, type RegistryClient } from '@/plugin/internal/tool/market/registry'
 
@@ -320,14 +320,135 @@ describe('updating in a container', () => {
 })
 
 describe('what blocks an update', () => {
-  it('refuses a source tree, then LLBOT_SELF_UPDATE=0', async () => {
+  it('refuses a source tree', async () => {
     const source = mkdtempSync(path.join(tmpdir(), 'llbot-source-'))
     try {
       expect(await updateBlocker(source)).toBe('从源码运行时不能自动更新')
     } finally {
       rmSync(source, { recursive: true, force: true })
     }
-    vi.stubEnv('LLBOT_SELF_UPDATE', '0')
-    expect(await updateBlocker(installDir)).toBe('已用环境变量 LLBOT_SELF_UPDATE=0 关闭自动更新')
+  })
+})
+
+describe('GitHub release notes', () => {
+  const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { 'content-type': 'application/json' },
+  })
+
+  it('fetches release notes for v<version> and caches them', async () => {
+    const fetch = vi.fn(async (url: string) => {
+      expect(url).toBe(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v9.1.0`)
+      return jsonResponse({
+        name: 'v9.1.0 - Spring Update',
+        body: '## Changes\n- Better updates',
+        html_url: 'https://github.com/LLOneBot/LuckyLilliaBot/releases/tag/v9.1.0',
+        published_at: '2026-11-22T00:00:00Z',
+      })
+    })
+    const { client } = fakeRegistry({ '9.1.0': release('9.1.0') }, '9.1.0')
+    const core = updater(client, { fetch })
+    const first = await core.releaseNotes('9.1.0')
+    const second = await core.releaseNotes('9.1.0')
+    expect(first).toEqual({
+      version: '9.1.0',
+      title: 'v9.1.0 - Spring Update',
+      body: '## Changes\n- Better updates',
+      url: releasePageUrl('9.1.0'),
+      publishedAt: '2026-11-22T00:00:00Z',
+    })
+    expect(second).toEqual(first)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to a bare tag when v<version> is 404', async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.endsWith('/tags/v9.1.0')) return jsonResponse({ message: 'Not Found' }, 404)
+      return jsonResponse({ name: '', body: 'notes', html_url: 'https://github.com/LLOneBot/LuckyLilliaBot/releases/tag/9.1.0' })
+    })
+    const { client } = fakeRegistry({})
+    const notes = await updater(client, { fetch }).releaseNotes('9.1.0')
+    expect(notes).toMatchObject({ version: '9.1.0', title: 'v9.1.0', body: 'notes', url: 'https://github.com/LLOneBot/LuckyLilliaBot/releases/tag/9.1.0' })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports 404, rate limits, network failures and invalid versions clearly', async () => {
+    const { client } = fakeRegistry({})
+    const notFound = vi.fn(async () => jsonResponse({}, 404))
+    await expect(updater(client, { fetch: notFound }).releaseNotes('9.1.0')).rejects.toMatchObject({ status: 404, message: expect.stringContaining('v9.1.0') })
+
+    const rateLimited = vi.fn(async () => jsonResponse({}, 403))
+    await expect(updater(client, { fetch: rateLimited }).releaseNotes('9.1.0')).rejects.toMatchObject({ status: 502, message: expect.stringContaining('受限') })
+
+    const offline = vi.fn(async () => { throw new Error('ECONNRESET') })
+    await expect(updater(client, { fetch: offline }).releaseNotes('9.1.0')).rejects.toMatchObject({ status: 502, message: expect.stringContaining('ECONNRESET') })
+
+    await expect(updater(client, { fetch: notFound }).releaseNotes('latest')).rejects.toMatchObject({ status: 400, message: expect.stringContaining('完整的版本号') })
+  })
+
+  it('serves /release-notes for an explicit version or the latest checked version', async () => {
+    const fetch = vi.fn(async () => jsonResponse({ name: 'v9.1.0', body: 'hello', html_url: releasePageUrl('9.1.0') }))
+    const { client } = fakeRegistry({ '9.1.0': release('9.1.0') }, '9.1.0')
+    const core = updater(client, { fetch })
+    const routes = createCoreUpdateRoutes(core)
+    await core.check()
+
+    const implicit = await routes.request('/release-notes')
+    expect(implicit.status).toBe(200)
+    expect(await implicit.json()).toMatchObject({ success: true, data: { version: '9.1.0', body: 'hello' } })
+
+    const explicit = await routes.request('/release-notes?version=9.1.0')
+    expect(explicit.status).toBe(200)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('background auto-check', () => {
+  it('checks after the initial delay, repeats on schedule, announces each version once and stops on dispose', async () => {
+    vi.useFakeTimers()
+    let currentLatest = '9.1.0'
+    const releases: Record<string, Release> = { '9.1.0': release('9.1.0'), '9.2.0': release('9.2.0') }
+    const packument = vi.fn(async () => ({
+      name: CORE_PACKAGE,
+      'dist-tags': { latest: currentLatest },
+      versions: Object.fromEntries(Object.entries(releases).map(([version]) => [version, {
+        name: CORE_PACKAGE, version, dist: { tarball: `mem://${version}` },
+      } as PackageVersion])),
+    } as Packument))
+    const client: RegistryClient = { packument, tarball: async () => Buffer.alloc(0) }
+    const log = { info: vi.fn(), warn: vi.fn() }
+    const core = updater(client, { log })
+    const stop = scheduleAutoCheck(core, { delay: 1000, interval: 5000, log })
+
+    expect(packument).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(packument).toHaveBeenCalledTimes(1)
+    expect(core.status()).toMatchObject({ latest: '9.1.0', available: true })
+    expect(log.info).toHaveBeenCalledTimes(1)
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('9.1.0'))
+
+    // Same version again: checks, but does not repeat the log line
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(packument).toHaveBeenCalledTimes(2)
+    expect(log.info).toHaveBeenCalledTimes(1)
+
+    // Newer version published: logs once more
+    currentLatest = '9.2.0'
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(packument).toHaveBeenCalledTimes(3)
+    expect(core.status().latest).toBe('9.2.0')
+    expect(log.info).toHaveBeenCalledTimes(2)
+    expect(log.info).toHaveBeenLastCalledWith(expect.stringContaining('9.2.0'))
+
+    stop()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(packument).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not leave a background failure in status.error', async () => {
+    const { client } = fakeRegistry({})
+    const core = updater(client)
+    const status = await core.check({ background: true })
+    expect(status.error).toBeUndefined()
+    expect(status.available).toBe(false)
   })
 })

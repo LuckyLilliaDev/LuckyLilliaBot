@@ -10,7 +10,7 @@ import { version as runningVersion } from '../version'
 import { canRestart, requestRestart } from './hostLifecycle'
 import { currentInstance } from '@/common/instance'
 import { runningInstances } from './instanceLock'
-import { FAILED_RUNTIME_DIR_NAME, inContainer, RELEASE_NAMES, runtimeDir, RUNTIME_DIR_NAME, selfUpdateDisabled } from './runtime'
+import { FAILED_RUNTIME_DIR_NAME, inContainer, RELEASE_NAMES, runtimeDir, RUNTIME_DIR_NAME } from './runtime'
 import { isExactVersion, matches, Registries, RegistryError, type PackageVersion, type RegistryClient } from '../plugin/internal/tool/market/registry'
 import { MarketSchema, registriesOf, type MarketSettings } from '../plugin/internal/tool/market/settings'
 import { extractPackage } from '../plugin/internal/tool/market/tar'
@@ -19,8 +19,16 @@ const gunzipAsync = promisify(gunzip)
 
 /** The npm package releases of the bot itself are published as */
 export const CORE_PACKAGE = '@luckylillia-dev/luckylillia'
+/** Where release notes live on GitHub */
+export const GITHUB_REPO = 'LLOneBot/LuckyLilliaBot'
+export const releasePageUrl = (version: string) => `https://github.com/${GITHUB_REPO}/releases/tag/v${version}`
 /** Inside the installation: staged downloads and the files the last update replaced */
 export const WORK_DIR = '.llbot-update'
+/** Background checks: shortly after startup, then every 6 hours */
+export const AUTO_CHECK_DELAY = 15_000
+export const AUTO_CHECK_INTERVAL = 6 * 60 * 60 * 1000
+const RELEASE_NOTES_CACHE_TTL = 10 * 60 * 1000
+const RELEASE_NOTES_TIMEOUT = 15_000
 /** Never replaced, whatever a package carries: the user's data, and this updater's own work */
 const PROTECTED = new Set(['data', WORK_DIR])
 const MAX_TAR = 1024 * 1024 * 1024
@@ -29,6 +37,14 @@ export class CoreUpdateError extends Error {
   constructor(message: string, readonly status: 400 | 404 | 409 | 502 = 400) {
     super(message)
   }
+}
+
+export interface ReleaseNotes {
+  version: string
+  title: string
+  body: string
+  url: string
+  publishedAt?: string
 }
 
 export interface CoreUpdateStatus {
@@ -52,6 +68,8 @@ export interface CoreUpdaterOptions {
   installDir: string
   current?: string
   registry: () => RegistryClient
+  /** For GitHub release notes; passes through ctx.http so the builtin proxy applies */
+  fetch?: (url: string, init?: RequestInit) => Promise<Response>
   /** Why it cannot update itself right now, if it cannot */
   blocker?: () => Promise<string | undefined>
   /** Shuts down and has the supervisor start the new version; false when nothing would start it again */
@@ -81,6 +99,7 @@ export class CoreUpdater {
   private error?: string
   private checkedAt?: number
   private blocked?: string
+  private notesCache = new Map<string, { notes: ReleaseNotes; fetchedAt: number }>()
   readonly current: string
 
   constructor(private readonly options: CoreUpdaterOptions) {
@@ -102,10 +121,10 @@ export class CoreUpdater {
     }
   }
 
-  async check(): Promise<CoreUpdateStatus> {
+  async check(options: { background?: boolean } = {}): Promise<CoreUpdateStatus> {
     if (this.state !== 'idle') return this.status()
     this.state = 'checking'
-    this.error = undefined
+    if (!options.background) this.error = undefined
     try {
       this.blocked = await this.options.blocker?.()
       const document = await this.options.registry().packument(CORE_PACKAGE)
@@ -114,12 +133,65 @@ export class CoreUpdater {
       if (!latest || !isExactVersion(latest.version)) throw new CoreUpdateError('npm 上的版本信息不完整：没有有效的 latest 版本', 502)
       this.latest = latest
       this.checkedAt = Date.now()
+      this.error = undefined
     } catch (e) {
-      this.error = describe(e)
+      if (!options.background) this.error = describe(e)
     } finally {
       this.state = 'idle'
     }
     return this.status()
+  }
+
+  /** Fetches the GitHub release notes for `version`, cached briefly to stay within API limits */
+  async releaseNotes(version: string): Promise<ReleaseNotes> {
+    if (!isExactVersion(version)) throw new CoreUpdateError('要填写完整的版本号')
+    const cached = this.notesCache.get(version)
+    if (cached && Date.now() - cached.fetchedAt < RELEASE_NOTES_CACHE_TTL) return cached.notes
+
+    const doFetch = this.options.fetch ?? ((url: string, init?: RequestInit) => globalThis.fetch(url, init))
+    const headers = {
+      accept: 'application/vnd.github+json',
+      'user-agent': `LuckyLilliaBot/${this.current}`,
+      'x-github-api-version': '2022-11-28',
+    }
+    let lastStatus = 404
+    for (const tag of [`v${version}`, version]) {
+      let response: Response
+      try {
+        response = await doFetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${encodeURIComponent(tag)}`,
+          { headers, signal: AbortSignal.timeout(RELEASE_NOTES_TIMEOUT) },
+        )
+      } catch (e) {
+        throw new CoreUpdateError(`无法连接 GitHub：${describe(e)}`, 502)
+      }
+      if (response.status === 404) {
+        lastStatus = 404
+        continue
+      }
+      if (response.status === 403 || response.status === 429) {
+        throw new CoreUpdateError('GitHub API 访问受限，请稍后重试或前往 GitHub 查看', 502)
+      }
+      if (!response.ok) {
+        throw new CoreUpdateError(`无法读取更新日志（GitHub 返回 ${response.status}）`, 502)
+      }
+      let data: { name?: unknown; body?: unknown; html_url?: unknown; published_at?: unknown }
+      try {
+        data = await response.json() as typeof data
+      } catch {
+        throw new CoreUpdateError('GitHub 返回的更新日志格式无效', 502)
+      }
+      const notes: ReleaseNotes = {
+        version,
+        title: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : `v${version}`,
+        body: typeof data.body === 'string' ? data.body : '',
+        url: typeof data.html_url === 'string' && /^https?:\/\//i.test(data.html_url) ? data.html_url : releasePageUrl(version),
+        publishedAt: typeof data.published_at === 'string' ? data.published_at : undefined,
+      }
+      this.notesCache.set(version, { notes, fetchedAt: Date.now() })
+      return notes
+    }
+    throw new CoreUpdateError(`GitHub 上还没有 v${version} 的发布说明`, lastStatus === 404 ? 404 : 502)
   }
 
   /** Installs `version`, the one a check reported as latest, and restarts into it */
@@ -321,28 +393,71 @@ export async function updateBlocker(installDir: string): Promise<string | undefi
   if (!RELEASE_NAMES.includes(name as string) || !existsSync(path.join(installDir, 'llbot-core.js'))) {
     return '从源码运行时不能自动更新'
   }
-  if (selfUpdateDisabled()) return '已用环境变量 LLBOT_SELF_UPDATE=0 关闭自动更新'
   if (!canRestart()) return '以 --no-supervisor 启动时不能自动更新'
   const others = await runningInstances(currentInstance().name)
   if (others.length) return `实例 ${others.join('、')} 也在用这份程序运行，请先停止它们再更新`
 }
 
+export interface AutoCheckOptions {
+  delay?: number
+  interval?: number
+  log?: { info(message: string): void; warn(message: string): void }
+}
+
+/** Runs a background check shortly after startup and periodically after that; returns a disposer. */
+export function scheduleAutoCheck(updater: CoreUpdater, options: AutoCheckOptions = {}): () => void {
+  const delay = options.delay ?? AUTO_CHECK_DELAY
+  const interval = options.interval ?? AUTO_CHECK_INTERVAL
+  let announced: string | undefined
+  let stopped = false
+
+  const run = async (allowCached = false) => {
+    if (stopped) return
+    const current = updater.status()
+    const fresh = allowCached && current.checkedAt !== undefined && Date.now() - current.checkedAt < interval
+    const status = fresh ? current : await updater.check({ background: true })
+    if (!stopped && status.available && status.latest && status.latest !== announced) {
+      announced = status.latest
+      options.log?.info(`发现新版本 ${status.latest}（当前 ${status.current}），可在 WebUI 更新`)
+    }
+  }
+
+  let periodic: ReturnType<typeof setInterval> | undefined
+  const initial = setTimeout(() => {
+    void run(true)
+    if (!stopped) {
+      periodic = setInterval(() => { void run(false) }, interval)
+      periodic.unref?.()
+    }
+  }, delay)
+  initial.unref?.()
+
+  return () => {
+    stopped = true
+    clearTimeout(initial)
+    if (periodic) clearInterval(periodic)
+  }
+}
+
 export const name = 'core-update'
 export const inject = ['plugins', 'http']
 
-/** Mounts the updater: /api/core-update/status, /check and /update, behind the WebUI login */
+/** Mounts the updater: /api/core-update/status, /check, /update and /release-notes, behind the WebUI login */
 export function apply(ctx: Context) {
   const installDir = import.meta.dirname
+  const log = ctx.logger('core-update')
   const updater = new CoreUpdater({
     installDir,
     registry: () => {
       const settings = new MarketSchema(ctx.plugins.entrySettings('builtin:market')?.config as MarketSettings | undefined)
       return new Registries(registriesOf(settings), (url, init) => ctx.http.fetch(url, init))
     },
+    fetch: (url, init) => ctx.http.fetch(url, init),
     blocker: () => updateBlocker(installDir),
-    log: ctx.logger('core-update'),
+    log,
   })
-  updater.cleanup().catch(e => ctx.logger('core-update').warn(e))
+  updater.cleanup().catch(e => log.warn(e))
+  ctx.effect(() => scheduleAutoCheck(updater, { log }))
   ctx.inject(['webuiServer'], (ctx) => {
     ctx.webuiServer.route('/api/core-update', new Hono().route('/api/core-update', createCoreUpdateRoutes(updater)))
   })
@@ -363,6 +478,10 @@ export function createCoreUpdateRoutes(updater: CoreUpdater): Hono {
   router.post('/update', c => respond(c, async () => {
     const body = await c.req.json().catch(() => ({})) as { version?: unknown }
     return updater.update(String(body.version ?? ''))
+  }))
+  router.get('/release-notes', c => respond(c, async () => {
+    const version = c.req.query('version') ?? updater.status().latest ?? ''
+    return updater.releaseNotes(version)
   }))
   return router
 }

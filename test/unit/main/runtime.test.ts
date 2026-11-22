@@ -73,12 +73,6 @@ describe('choosing the core to start', () => {
     expect(choose()).toMatchObject({ core: own(), note: expect.stringContaining('不是完整的发布包') })
     expect(existsSync(runtimeDir(cwd))).toBe(true)
   })
-
-  it('leaves an installed release alone when LLBOT_SELF_UPDATE=0', () => {
-    release(runtimeDir(cwd), '9.1.0')
-    expect(choose({ LLBOT_SELF_UPDATE: '0' })).toMatchObject({ core: own(), note: expect.stringContaining('LLBOT_SELF_UPDATE=0') })
-    expect(existsSync(runtimeDir(cwd))).toBe(true)
-  })
 })
 
 describe('setting a failed release aside', () => {

@@ -14,7 +14,9 @@ import {
 import { ResConfig } from './types';
 import { apiFetch, setPasswordPromptHandler } from './utils/api';
 import { useBotsPolling } from './stores/botsStore';
+import { shouldShowSidebarDot, useCoreUpdatePolling, useCoreUpdateStore } from './stores/coreUpdateStore';
 import { useLayout } from './stores/layoutStore';
+import ReleaseNotesDialog from './core/ReleaseNotesDialog';
 import { Loader2, Menu } from 'lucide-react';
 
 // Every tab is a plugin page. Builtins register theirs before the first render (registerCorePages,
@@ -51,14 +53,18 @@ function App() {
   const setSidebarCollapsed = useLayout(state => state.setSidebarCollapsed);
   usePluginHost(!checkingLogin);
   useBotsPolling(!checkingLogin);
+  useCoreUpdatePolling(!checkingLogin);
+  const updateStatus = useCoreUpdateStore(state => state.status);
+  const updatePrefs = useCoreUpdateStore(state => state.prefs);
+  const aboutBadge = shouldShowSidebarDot(updateStatus, updatePrefs);
   const plugins = usePluginList(state => state.plugins);
   const pluginPages = useVisiblePages();
   const openablePages = useVisiblePages('open');
   const tab = activeTab ?? pluginPages[0]?.key ?? 'plugins';
   const currentPluginPage = openablePages.find(page => page.key === tab);
   const sidebarPluginPages = useMemo(
-    () => pluginPages.map(page => ({ id: page.key, title: page.title, icon: iconByName(page.icon) })),
-    [pluginPages],
+    () => pluginPages.map(page => ({ id: page.key, title: page.title, icon: iconByName(page.icon), badge: page.key === 'about' ? aboutBadge : undefined })),
+    [pluginPages, aboutBadge],
   );
 
   useEffect(() => {
@@ -200,6 +206,8 @@ function App() {
           {currentPluginPage ? <PluginPage page={currentPluginPage} /> : <PluginPageUnavailable tab={tab} />}
         </div>
       </main>
+
+      <ReleaseNotesDialog />
 
       <TokenDialog
         visible={showPasswordDialog}

@@ -12,7 +12,7 @@ interface SidebarProps {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   /** Every entry: the pages of plugins, the WebUI's own included, in sidebar order. */
-  pluginPages?: { id: string; title: string; icon: LucideIcon }[];
+  pluginPages?: { id: string; title: string; icon: LucideIcon; badge?: boolean }[];
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -24,7 +24,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   pluginPages = [],
 }) => {
-  const menuItems = pluginPages.map(page => ({ id: page.id, icon: page.icon, label: page.title }))
+  const menuItems = pluginPages.map(page => ({ id: page.id, icon: page.icon, label: page.title, badge: page.badge }))
 
   const navRef = useRef<HTMLElement>(null)
   const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null)
@@ -125,6 +125,13 @@ const Sidebar: React.FC<SidebarProps> = ({
               >
                 <Icon size={20} />
                 <span className='font-medium'>{item.label}</span>
+                {item.badge && (
+                  <span
+                    aria-label='有可用更新'
+                    title='有可用更新'
+                    className={`ml-auto w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-white' : 'bg-pink-500'}`}
+                  />
+                )}
               </button>
             )
           })}

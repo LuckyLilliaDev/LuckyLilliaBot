@@ -31,9 +31,6 @@ export function inContainer(env: NodeJS.ProcessEnv = process.env, exists: (file:
   return exists('/.dockerenv') || exists('/run/.containerenv')
 }
 
-/** LLBOT_SELF_UPDATE=0 turns self-updating off: nothing is installed, and an installed release is not started */
-export const selfUpdateDisabled = (env: NodeJS.ProcessEnv = process.env) => env.LLBOT_SELF_UPDATE === '0'
-
 export interface Release {
   dir: string
   version: string
@@ -100,7 +97,6 @@ export function chooseCore(options: ChooseOptions): CoreChoice {
   if (!(options.container ?? inContainer(env))) return own
   const dir = runtimeDir(options.cwd)
   if (!existsSync(dir)) return own
-  if (selfUpdateDisabled(env)) return { ...own, note: `LLBOT_SELF_UPDATE=0：不启动 ${dir} 中自动更新的版本` }
   const runtime = readRelease(dir)
   if (!runtime) return { ...own, note: `${dir} 不是完整的发布包，使用镜像自带的版本` }
   const image = readRelease(options.installDir)
