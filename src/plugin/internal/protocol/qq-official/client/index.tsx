@@ -6,10 +6,11 @@ import { IntentsField } from './IntentsField'
 import ConnectionStatus from './ConnectionStatus'
 import QuickSetup from './QuickSetup'
 import { QQOfficialCard } from './DashboardCard'
+import CapabilitiesDialog, { acknowledgeCapabilities, hasAcknowledgedCapabilities } from './CapabilitiesDialog'
 
 export const name = 'builtin:qq-official'
 
-const QQOfficialSettings: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+const QQOfficialSettings: React.FC<{ onComplete: () => void; onOpenCapabilities: () => void }> = ({ onComplete, onOpenCapabilities }) => {
   const config = usePluginConfig<QQOfficialConfig>()
   const [selectedMode, setMode] = useState<'qr' | 'manual' | null>(null)
   const mode = selectedMode ?? (config.value?.appId ? 'manual' : 'qr')
@@ -32,7 +33,16 @@ const QQOfficialSettings: React.FC<{ onComplete: () => void }> = ({ onComplete }
             <h3 className="text-lg font-semibold text-theme">QQ 官方机器人</h3>
             <ConnectionStatus />
           </div>
-          <p className="text-sm text-theme-secondary">接入 QQ 开放平台的官方机器人，插件同样能在它上面收发消息</p>
+          <p className="text-sm text-theme-secondary">
+            接入 QQ 开放平台的官方机器人，
+            <button
+              type="button"
+              onClick={onOpenCapabilities}
+              className="text-pink-500 hover:underline font-medium"
+            >
+              查看QQ官方机器人能力
+            </button>
+          </p>
         </div>
         <a href="https://q.qq.com/qqbot/" target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-sm text-pink-500 hover:underline">
@@ -89,8 +99,24 @@ const QQOfficialSettings: React.FC<{ onComplete: () => void }> = ({ onComplete }
 
 const QQOfficialPage = () => {
   const [revision, setRevision] = useState(0)
+  const [showCapabilities, setShowCapabilities] = useState(() => !hasAcknowledgedCapabilities())
   return (
-    <QQOfficialSettings key={revision} onComplete={() => setRevision(value => value + 1)} />
+    <>
+      <QQOfficialSettings
+        key={revision}
+        onComplete={() => setRevision(value => value + 1)}
+        onOpenCapabilities={() => setShowCapabilities(true)}
+      />
+      {showCapabilities && (
+        <CapabilitiesDialog
+          onClose={() => setShowCapabilities(false)}
+          onAcknowledge={() => {
+            acknowledgeCapabilities()
+            setShowCapabilities(false)
+          }}
+        />
+      )}
+    </>
   )
 }
 

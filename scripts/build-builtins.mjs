@@ -75,6 +75,7 @@ for (const dir of entries) {
     await bundle({
       absWorkingDir: root, entryPoints: [client], outfile: path.join(out, 'lib/client/module.js'), bundle: true,
       platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic', minify: true,
+      loader: { '.png': 'dataurl', '.jpg': 'dataurl', '.jpeg': 'dataurl', '.webp': 'dataurl', '.svg': 'dataurl' },
       nodePaths: [path.join(fe, 'node_modules')],
       alias: { '@ntqqapi/types': path.join(root, 'src/ntqq/types.ts') },
       external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@luckylillia-dev/plugin-sdk/webui'],
