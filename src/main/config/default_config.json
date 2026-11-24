@@ -75,12 +75,9 @@
       }
     ]
   },
-  "enableLocalFile2Url": false,
   "log": true,
   "logLevel": "info",
-  "autoDeleteFile": false,
-  "autoDeleteFileSecond": 60,
-  "musicSignUrl": "https://llob.linyuchen.net/sign/music",
+  "musicCardSignUrl": "https://ss.xingzhige.com/music_card/card",
   "msgCacheExpire": 120,
   "ffmpeg": ""
 }

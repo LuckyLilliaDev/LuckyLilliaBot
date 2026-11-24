@@ -43,12 +43,18 @@ function getModuleDependencies(moduleName: string, basePath = path.join(import.m
   return result
 }
 
-const external = [
+// Plugins import these at runtime and must get the very objects the host uses (a second cordis
+// means services, symbols and events no longer line up), so the host loads them from node_modules too.
+const pluginShared = ['cordis', 'cosmokit', 'schemastery', '@standard-schema/spec', '@satorijs/element', '@satorijs/protocol']
+
+const external = [...new Set([
   'ws',
-  'silk-wasm',
+  // Carries its HTTP parser as embedded WASM: copied as it is rather than bundled
+  'undici',
   ...getModuleDependencies('reggol'),
   ...getModuleDependencies('file-type'),
-]
+  ...pluginShared.flatMap(name => getModuleDependencies(name)),
+])]
 
 function genCpModule(module: string | RegExp) {
   return { src: `./node_modules/${module}`, dest: `dist/node_modules/${module}`, flatten: false }
@@ -67,29 +73,26 @@ export default defineConfig({
     target: 'node22',
     rolldownOptions: {
       platform: 'node',
-      external: [...external, ...builtinModules, /^node:/],
-      input: 'src/main/main.ts',
+      external: [...external, '@luckylillia-dev/plugin-sdk', ...builtinModules, /^node:/],
+      // llbot.js is the small supervisor every launcher runs; it runs the bot, llbot-core.js, as a child
+      input: { llbot: 'src/main/llbot.ts', 'llbot-core': 'src/main/main.ts' },
       output: {
-        entryFileNames: 'llbot.js',
+        entryFileNames: '[name].js',
+        chunkFileNames: 'chunks/[name]-[hash].js',
         format: 'es',
       },
       plugins: [
         cp({
           targets: [
             ...external.map(genCpModule),
+            { src: './packages/plugin-sdk/lib', dest: 'dist/node_modules/@luckylillia-dev/plugin-sdk/lib', flatten: false },
+            { src: './packages/plugin-sdk/package.json', dest: 'dist/node_modules/@luckylillia-dev/plugin-sdk/' },
+            { src: './output/builtin-packages', dest: 'dist/builtin-plugins', flatten: false },
+            { src: './output/builtin-packages/@luckylillia-dev/plugin-webui/lib/webui', dest: 'dist/webui', flatten: false },
             { src: './src/main/config/default_config.json', dest: 'dist/' },
             { src: './package-dist.json', dest: 'dist/', rename: 'package.json' },
             { src: './doc/使用说明.txt', dest: 'dist/' },
             { src: './doc/更新日志.txt', dest: 'dist/' },
-            // sign-proxy native: bundle 后 llbot.js 里 here=dist/, requireBin 拼出来的
-            // 路径是 dist/sign-proxy.<triple>.node, 必须扁平拷到 dist 根目录.
-            // 用 glob 一次性带上所有平台的 .node, 缺哪个就 build 哪个 platform 时再补.
-            // Match `sign-proxy.*` only: the dev build (sign-proxy-dev.*, localhost base_url, --dev) must never
-            // reach dist -- the Dockerfile / publish.yml filters downstream don't match that prefix.
-            { src: './src/main/qqProtocol/direct-lib/sign-proxy/sign-proxy.*.node', dest: 'dist/', flatten: true },
-            // sign-proxy 版本号: pickVersion() 直接读 sign-proxy.package.json (源头就是这个名,
-            // 不跟 Bot 主 package.json 撞).
-            { src: './src/main/qqProtocol/direct-lib/sign-proxy/sign-proxy.package.json', dest: 'dist/' },
           ],
         }),
       ],

@@ -1,0 +1,684 @@
+/**
+ * The WebUI side of a plugin: the ES module named by `llbot.webui` in package.json. Its default export
+ * receives a WebUIContext and registers what the plugin adds to the WebUI.
+ *
+ * The WebUI hands the module its own `react`, `react/jsx-runtime`, `react-dom` and this module through an
+ * import map, so components share its React. Mark all four external when bundling. The `declare`d values below
+ * are those the WebUI supplies at runtime.
+ */
+
+/**
+ * A React component, `React.lazy()` ones included: the WebUI renders plugin components inside Suspense.
+ * Typed loosely so that this SDK does not depend on @types/react.
+ */
+export type Component<P = any> = ((props: P) => any) | (new (props: P) => any) | { readonly $$typeof: symbol }
+
+/** A function component the WebUI supplies, for use in JSX. */
+export type WebUIComponent<P = {}> = (props: P) => any
+
+export interface PageOptions {
+  /** Unique within the plugin; the WebUI prefixes it with the package name to make the tab id. */
+  id: string
+  title: string
+  /** lucide icon name, from the same list as `llbot.icon`. */
+  icon?: string
+  /** Rendered without props. */
+  component: Component<{}>
+  /**
+   * Drawn above the page where the Dashboard has its title, on wide screens only; rendered without props. Without
+   * it that room stays empty.
+   */
+  header?: Component<{}>
+  /**
+   * Sidebar position, lowest first, shared with the builtin pages: Dashboard 0, NTQQ 协议 5, 日志 20, 插件 40,
+   * WebQQ 50, 关于 1000. Defaults to 100. Only where the page goes until the user arranges the sidebar (its dialog
+   * in the WebUI settings), whose order is kept over this one.
+   */
+  order?: number
+  /**
+   * A settings page: shown whatever state the plugin is in, under a notice saying what keeps it from running, e.g.
+   * the plugin it waits for. Once the plugin is disabled the sidebar drops the page, but the plugin card still opens
+   * it. Any other page is listed while the plugin is enabled too, but the WebUI shows that reason in its place until
+   * the plugin runs.
+   */
+  settings?: boolean
+}
+
+/**
+ * How a slot shows its contributions:
+ * - `list` every one, in `order`
+ * - `single` one, the highest `priority`, and what the slot shows by itself while none is there
+ * - `keyed` one per key: the slot asks for a key (`match` of `Slot`), the highest `priority` among the contributions
+ *   with that `match` shows, else the slot's own content
+ * - `chain` every one, wrapped around each other in `order`, the first outermost: each gets what the rest drew in
+ *   `next`, around the slot's own content, and may wrap it, change it or pass it through
+ * - `hoc` wrappers receiving `children`, in `order` with the first outermost; `match` optionally selects a page
+ * Replacing what is there is only ever possible where a slot is `single` or `keyed`, changing it where it is `chain`.
+ */
+export type SlotCardinality = 'list' | 'single' | 'keyed' | 'chain' | 'hoc'
+
+/**
+ * The slots, by name, with the props the slot hands its contributions and the options they describe themselves
+ * with. Names are dotted paths of where they are: `dashboard.cards`, `webqq.chat.actions`. A plugin declaring one
+ * (`ctx.declareSlot`) adds it here by declaration merging, for the plugins filling it to type against:
+ *
+ *     declare module '@luckylillia-dev/plugin-sdk/webui' {
+ *       interface SlotMap { 'my-plugin.item.actions': { props: { item: Item }; options: {} } }
+ *     }
+ *
+ * The props of a `chain` slot include `next`, which the slot passes on itself.
+ */
+export interface SlotMap {
+  /** Actions beside the page title (also available in the mobile header). */
+  'page.header.actions': { props: { page: WebUIPageInfo }; options: {} }
+  /** Page wrappers, `hoc`: render children. `match` optionally limits a wrapper to a page key. Core management pages are excluded. */
+  'page.content': { props: { page: WebUIPageInfo; children: unknown }; options: {} }
+  'sidebar.header': { props: {}; options: {} }
+  'sidebar.footer': { props: {}; options: {} }
+  /** Active theme owner's controls, inside a collapsed "主题设置" disclosure; return null when no controls apply. */
+  'settings.appearance': { props: {}; options: {} }
+  /** Additional settings cards; the host draws the card and its optional title. */
+  'settings.sections': { props: {}; options: { title?: string } }
+  /** Additional actions in the plugin page's filter toolbar. */
+  'plugins.toolbar': { props: {}; options: {} }
+  /** Additional views opened from the plugin page's toolbar. Catalogs use plugins.catalog. */
+  'plugins.views': { props: PluginsViewProps; options: PluginsViewOptions }
+  /** Catalog data and package operations for the host's unified plugin list; renders no cards. */
+  'plugins.catalog': { props: PluginCatalogProps; options: {} }
+  /** Upload controls inside the host's local installation dialog. */
+  'plugins.install': { props: { onInstalled(): void; disabled?: boolean }; options: {} }
+  /** Buttons on each card of the plugin page, before its own. */
+  'plugins.card.actions': { props: { plugin: PluginEntryStatus }; options: {} }
+  /** Cards on the Dashboard, declared by the Dashboard plugin. It draws the card, its title and width; the component, its inside. */
+  'dashboard.cards': { props: {}; options: DashboardCardOptions }
+  /** The title of the Dashboard, `single`: a contribution replaces the Dashboard's own. */
+  'dashboard.header': { props: {}; options: {} }
+  /** Buttons in the header of a WebQQ chat, declared by WebQQ. */
+  'webqq.chat.actions': { props: { chat: WebQQChat }; options: {} }
+  /**
+   * How WebQQ draws a message element, `keyed` by its `elementType` (`'14'` for markdown): a contribution replaces
+   * WebQQ's own drawing of that type, or draws one WebQQ has none for. `message` is missing in a reply's quote.
+   */
+  'webqq.message.element': { props: { element: WebQQElement; message?: WebQQMessage }; options: {} }
+  /** The bubble of a WebQQ message, `chain`: `next` is the bubble as drawn so far. */
+  'webqq.message.bubble': { props: { message: WebQQMessage; next: unknown }; options: {} }
+}
+
+export interface DashboardCardOptions {
+  title?: string
+  /** lucide icon name, from the `llbot.icon` list. */
+  icon?: string
+  /**
+   * About a third of a row (default), two thirds, or the whole row; the cards of a row share out the room it has
+   * left, so one rendering nothing leaves no gap.
+   */
+  size?: 'normal' | 'wide' | 'full'
+}
+
+export interface PluginsViewProps {
+  /**
+   * The host's settings action for an installed entry, identified by its id from usePlugins().
+   * Opens the same settings page or config dialog as its plugin card, including for disabled plugins.
+   * Undefined if the entry is missing, busy, or has no settings.
+   */
+  configAction(id: string): { open(): void; label: string } | undefined
+  /** Opens the same details dialog as a plugin card, including for packages not installed yet. */
+  showDetails(source: PluginDetailsSource): void
+}
+
+export interface PluginDetailsContent {
+  markdown?: string
+  /** URL the markdown's relative image paths resolve against, ending in a slash. */
+  base: string
+  screenshots: LightboxImage[]
+}
+
+/** A catalog entry ready for display, without another metadata request. */
+export interface PluginCatalogItem extends PluginDetailsSource {
+  version: string
+  category?: string
+  repository?: string
+  /** Builtin entry name, when this package updates a bundled plugin. */
+  builtin?: string
+}
+
+export interface PluginInstalledPackage {
+  name: string
+  title?: string
+  version: string
+  description?: string
+  managed: boolean
+  root: string
+  builtin?: string
+  activeVersion?: string
+  restartRequired?: boolean
+  error?: string
+}
+
+export interface PluginUpdateInfo {
+  latest?: string
+  update?: string
+  blocked?: string
+  deprecated?: string
+  error?: string
+}
+
+export interface PluginPackageProgress {
+  phase: 'queued' | 'planning' | 'downloading' | 'installing'
+  /** 0-100 when measurable; omitted for indeterminate phases such as queued or planning. */
+  percent?: number
+  detail: string
+}
+
+/** Snapshot and guarded actions supplied by a catalog plugin. Installed entries remain owned by the host. */
+export interface PluginCatalogState {
+  items: PluginCatalogItem[] | null
+  loading: boolean
+  error?: string
+  installed: PluginInstalledPackage[] | null
+  installedError?: string
+  updates: Record<string, PluginUpdateInfo> | null
+  updatesError?: string
+  checking: boolean
+  loadingInstalled: boolean
+  checkedAt: number
+  busy: readonly string[]
+  progress?: Record<string, PluginPackageProgress>
+  retry(): void
+  refresh(): void
+  install(name: string, version: string): Promise<boolean>
+  update(name: string): Promise<boolean>
+  /** Retain per-entry configuration for a later reinstall when keepConfig is true. */
+  uninstall(name: string, options?: { keepConfig?: boolean }): Promise<boolean>
+}
+
+export interface PluginCatalogProps {
+  /** Fetch the catalog only when browsing uninstalled or all plugins. */
+  loadCatalog: boolean
+  /** Publish after render; clear the snapshot on unmount. */
+  onChange(state: PluginCatalogState | null): void
+}
+
+export interface PluginMetaRowProps {
+  title: string
+  category?: string
+  author?: { name: string; url?: string }
+  packageName?: string
+  repository?: string
+  /** Actions immediately after the package/repository links, e.g. a details button. */
+  children?: unknown
+  className?: string
+}
+
+/** The category, author and package links shared by installed plugin cards and market results. */
+export declare const PluginMetaRow: WebUIComponent<PluginMetaRowProps>
+
+/** Known metadata and screenshots display immediately; a loader can supply additional package details. */
+export interface PluginDetailsSource {
+  name: string
+  title: string
+  version?: string
+  description?: string
+  author?: { name: string; url?: string; email?: string }
+  icon?: string
+  iconUrl?: string
+  /** Available before the full details load, and if loading fails. */
+  screenshots?: LightboxImage[]
+  /** Omit when the caller already has all preview data, such as a market catalog entry. */
+  load?(): Promise<PluginDetailsContent>
+}
+
+export interface PluginsViewOptions {
+  /** The tab's name */
+  title: string
+  /** Drawn after the name, e.g. a count of updates; rendering nothing leaves the name alone */
+  badge?: WebUIComponent
+}
+
+/** The chat open in WebQQ. */
+export interface WebQQChat {
+  /** 1 private, 2 group, 100 temporary */
+  chatType: number
+  /** QQ number of the friend, number of the group */
+  peerId: string
+  name: string
+}
+
+/** A message as WebQQ shows it. */
+export interface WebQQMessage {
+  msgId: string
+  msgSeq: string
+  /** 1 private, 2 group, 100 temporary */
+  chatType: number
+  /** QQ number of the friend, number of the group */
+  peerId: string
+  senderUin: string
+  senderName: string
+  /** Unix seconds */
+  time: number
+  /** Its text elements, joined */
+  text: string
+  /** Sent by the logged-in account */
+  self: boolean
+}
+
+/** A message element as NTQQ has it: `elementType` and the field of that type, e.g. `markdownElement: { content }`. */
+export interface WebQQElement {
+  elementType: number
+  [field: string]: unknown
+}
+
+export type SlotContribution<K extends keyof SlotMap> = SlotMap[K]['options'] & {
+  /**
+   * Unique among this plugin's contributions to the slot, and kept from version to version: the plugin page hides
+   * and orders them by it.
+   */
+  id: string
+  /** What the plugin page calls it; defaults to its `title` option, then the id. */
+  label?: string
+  component: Component<SlotMap[K]['props']>
+  /** Lowest first in a `list` or a `chain` (outermost). Defaults to 100. */
+  order?: number
+  /** In a `single` slot, the highest one shows, in a `keyed` slot the highest for the key. Defaults to 0. */
+  priority?: number
+  /** In a `keyed` slot, the key this contribution draws. */
+  match?: string
+}
+
+export interface SlotDeclaration {
+  /** What the plugin page calls it, next to what fills it. */
+  title: string
+  description?: string
+  cardinality: SlotCardinality
+  /** Lets users arrange and hide this list's contributions in the declaring plugin's config dialog. */
+  configurable?: boolean
+}
+
+export interface ConfigEditorProps<T = any> {
+  /** The whole config with defaults filled in. */
+  value: T
+  onChange(value: T): void
+  /** schemastery `toJSON()` of the plugin's Config, or null. */
+  schema: unknown
+  defaults: unknown
+  /** Messages from the last rejected save, keyed by dotted path (`''` for the root). */
+  errors: Record<string, string>
+}
+
+export interface FieldProps<T = any> {
+  value: T
+  onChange(value: T): void
+  /** Meta of the schema node: description, default, role options and so on. */
+  meta: Record<string, any>
+  error?: string
+}
+
+export interface ApiOptions {
+  method?: string
+  /** Sent as JSON unless it is a string or FormData. */
+  body?: unknown
+}
+
+export interface WebUIPageInfo { key: string; owner: string; title: string; fullscreen: boolean }
+export type ThemeMode = 'light' | 'dark' | 'auto'
+/** Semantic CSS custom properties, e.g. --accent, --text-primary, --r-card. */
+export type ThemeTokens = Record<string, string>
+export interface ThemeVariant {
+  tokens: ThemeTokens
+  /** CSS background shorthand. When present, replaces the default animated wallpaper. Use ctx.asset() for images. */
+  background?: string
+}
+export interface ThemeDefinition {
+  /** Unique within this plugin. The stored key is <package>|<id>. */
+  id: string
+  title: string
+  description?: string
+  light: ThemeVariant
+  dark: ThemeVariant
+  /** Optional stylesheet, installed only while this theme is selected and its plugin runs. */
+  css?: string
+}
+export interface ThemeInfo {
+  key: string
+  owner: string
+  id: string
+  title: string
+  description?: string
+  available: boolean
+}
+export interface ThemeSnapshot {
+  mode: ThemeMode
+  isDark: boolean
+  /** Saved preference; preserved while its plugin is unavailable. 'default' is the built-in theme. */
+  selected: string
+  /** Effective theme, falling back to 'default' until the selected plugin runs. */
+  active: string
+  background?: string
+  themes: ThemeInfo[]
+}
+export interface ThemeController {
+  register(theme: ThemeDefinition): () => void
+  /** Later layers win. A source replaces its previous layer; cleanup never removes a newer layer. */
+  overrideTokens(source: string, tokens: { light: ThemeTokens; dark: ThemeTokens }): () => void
+  get(): ThemeSnapshot
+  /** Selects one of this plugin's theme ids, or 'default'. Selection is saved in this browser. */
+  select(id: string): void
+}
+export interface ThemeState extends ThemeSnapshot {
+  /** Selects a theme by its full key from themes, or 'default'. */
+  select(key: string): void
+  setMode(mode: ThemeMode): void
+}
+export interface StyleOptions {
+  /** Global CSS by default. 'plugin' limits selectors to this plugin's rendered components and portals. */
+  scope?: 'global' | 'plugin'
+  /** Active by default. Scoped component utilities can stay 'loaded' for disabled configuration pages. */
+  when?: 'active' | 'loaded'
+}
+export declare function useTheme(): ThemeState
+
+export interface WebUIContext {
+  /** The package this module belongs to. */
+  readonly plugin: { readonly name: string }
+  readonly theme: ThemeController
+  /** A managed stylesheet: active by default, removed on module disposal. See StyleOptions for scoped component CSS. */
+  style(id: string, css: string, options?: StyleOptions): () => void
+  /** Resolves a file relative to this module inside its served WebUI directory. */
+  asset(path: string): string
+  /** Adds a sidebar page, listed while the plugin is enabled; see `PageOptions.settings`. */
+  page(options: PageOptions): () => void
+  /**
+   * Adds a contribution to a slot, the WebUI's or one another plugin declared; it shows while this plugin runs. One
+   * into a slot nobody declares waits for it, and the plugin page says so. Throws for a missing or repeated `id`.
+   */
+  slot<K extends keyof SlotMap>(name: K, contribution: SlotContribution<K>): () => void
+  /**
+   * Declares a slot of this plugin's own UI for other plugins to fill; render it with `Slot` where it goes. Name it
+   * after the plugin and the place (`my-plugin.item.actions`); a name taken already throws.
+   */
+  declareSlot(name: string, declaration: SlotDeclaration): () => void
+  /**
+   * Replaces the generated form in this plugin's config dialog, which also opens while the plugin is
+   * disabled. Saving still goes through the bot, which validates against the plugin's Config.
+   */
+  config(component: Component<ConfigEditorProps>): () => void
+  /** Renders schema fields declared with `.role(role)` in every plugin's generated config form. */
+  field(role: string, component: Component<FieldProps>): () => void
+  /** Calls the bot's HTTP API with the WebUI login; resolves with `data` of a `{ success, data }` reply. */
+  api<T = any>(path: string, options?: ApiOptions): Promise<T>
+  /**
+   * fetch() with the WebUI login, for what `api()` does not cover (raw bodies, streams, error bodies). Asks for
+   * the password the way the WebUI does when its login refuses the request; any other error response, a 401 or 403
+   * of the route's own included, comes back as it is.
+   */
+  fetch(path: string, init?: RequestInit): Promise<Response>
+  /** The path with the WebUI login in its query: for `<img>`, `<video>`, downloads and the like, which send no headers. */
+  authUrl(path: string): string
+  /** Address of one of this plugin's pages, for links and `window.open()`; `fullscreen` opens it without the sidebar. */
+  pageHref(id: string, options?: { fullscreen?: boolean }): string
+  /**
+   * Listens to a server-sent event stream of the bot's API, by event name; returns the function closing it, which
+   * unloading the module calls as well.
+   */
+  events(path: string, listeners: Record<string, (data: any) => void>): () => void
+  /** Defaults to `success`. */
+  toast(message: string, type?: 'success' | 'error' | 'warning'): void
+}
+
+/**
+ * The module's default export. It may return a cleanup function, run when the module is replaced by a
+ * newer version of the plugin. Everything registered through `ctx` is removed then as well, and when the function
+ * throws: a module's part of the WebUI is there whole or not at all.
+ */
+export type WebUIPlugin = (ctx: WebUIContext) => void | (() => void)
+
+/** The WebUIContext of the plugin whose component is rendering. Supplied by the WebUI at runtime. */
+export declare function usePluginContext(): WebUIContext
+
+export type PluginState = 'missing' | 'incompatible' | 'pending' | 'loading' | 'active' | 'failed' | 'disposed'
+
+/** How the WebUI sees a plugin entry, from the plugin list. */
+export interface PluginEntryStatus {
+  id: string
+  name: string
+  title?: string
+  disabled: boolean
+  state: PluginState
+  error?: string
+  /** Services the entry waits for while pending */
+  missingDeps: string[]
+  /** What an enabled builtin says about its settings, e.g. that something still has to be filled in */
+  notice?: string
+  /** Metadata from the installed package; the title may be localized. */
+  manifest?: { title?: string | Record<string, string>; icon?: string }
+  iconUrl?: string
+  /** This entry has active message listeners. */
+  messages?: boolean
+  /** Its saved position in the message processing order. */
+  rank?: number
+  scope?: {
+    platforms?: string[]
+    bots?: string[]
+    guilds?: { mode: 'allow' | 'deny'; ids: string[] }
+    users?: { mode: 'allow' | 'deny'; ids: string[] }
+    direct?: boolean
+  }
+  listenerError?: { at: number; message: string; count: number }
+}
+
+/**
+ * The entry of the plugin whose component is rendering, kept current; undefined until the plugin list loads.
+ * A package with several entries gets its first one.
+ */
+export declare function usePluginStatus(): PluginEntryStatus | undefined
+
+export interface PluginConfigState<T = any> {
+  /** The whole config with defaults filled in, secrets masked; null until loaded. */
+  value: T | null
+  setValue(value: T): void
+  /** schemastery `toJSON()` of the plugin's Config, or null. */
+  schema: unknown
+  /** Why loading failed. */
+  error: string
+  /** Messages from the last rejected save, keyed by dotted path (`''` for the root). */
+  errors: Record<string, string>
+  saving: boolean
+  /**
+   * Saves `value` (or `next`) through the bot, which validates it against the Config and the plugin restarts
+   * with it. Says how it went in a toast; resolves whether it saved. A save that would clobber a newer one
+   * reloads instead.
+   */
+  save(next?: T, options?: { message?: string }): Promise<boolean>
+  /** Empties a stored secret on the next save: sending it back masked or blank keeps it. */
+  clearSecret(path: string): void
+}
+
+/** The config of the plugin whose component is rendering (its first entry), loaded on mount. */
+export declare function usePluginConfig<T = any>(): PluginConfigState<T>
+
+export interface SchemaFormProps<T = any> {
+  /** schemastery `toJSON()` output, as in PluginConfigState and ConfigEditorProps. */
+  schema: unknown
+  value: T
+  onChange(value: T): void
+  errors?: Record<string, string>
+  /** Only these top-level fields, in this order. */
+  fields?: string[]
+  /** See PluginConfigState.clearSecret; without it secret fields have no clear button. */
+  onClearSecret?(path: string): void
+}
+
+/** The form the WebUI generates from a schema, or some of its fields. Field roles registered with `ctx.field()` apply. */
+export declare const SchemaForm: WebUIComponent<SchemaFormProps>
+
+export interface SchemaSettingsProps {
+  /** Only these top-level fields of the Config, in this order. */
+  fields?: string[]
+  /** Top-level fields boxed under a title, after the rest; `description` sits beside it, `collapsed` starts folded. */
+  sections?: { title: string; description?: string; fields: string[]; collapsed?: boolean }[]
+  /** Shown next to the title, e.g. the documentation. */
+  links?: { label: string; href: string }[]
+  /** Below the form, above the save button; a function gets the config being edited. */
+  children?: unknown | ((config: PluginConfigState) => unknown)
+}
+
+/**
+ * A whole settings page for `ctx.page({ settings: true })`: the plugin's title and description, the form
+ * generated from its Config and a save button.
+ */
+export declare const SchemaSettings: WebUIComponent<SchemaSettingsProps>
+
+/** A listen address: the machine's addresses to pick from, or one typed in. The form uses it for `.role('host')`. */
+export declare const HostInput: WebUIComponent<{ value: string; onChange(value: string): void }>
+
+export interface PathInputProps {
+  value: string
+  onChange(value: string): void
+  /** A file (the default) or a directory */
+  select?: 'file' | 'directory'
+  /** Extensions of the files listed, e.g. `['.exe']`; the others show on request */
+  accept?: string[]
+  /** Where the browser opens while there is no value, e.g. what is used without one */
+  start?: string
+  placeholder?: string
+  disabled?: boolean
+  /** The browser's title */
+  title?: string
+}
+
+/**
+ * A path on the machine the bot runs on: typed, or picked in a browser of that machine's directories (the WebUI may
+ * be open elsewhere, so the browser's own file dialog would pick from the wrong machine). Lists names only.
+ */
+export declare const PathInput: WebUIComponent<PathInputProps>
+
+export interface DurationInputProps {
+  /** Seconds */
+  value: number
+  onChange(seconds: number): void
+  /** Most days it takes; 0 leaves the days field out. Default 1 */
+  maxDays?: number
+  /** Default true */
+  showSeconds?: boolean
+}
+
+/** A length of time in days, hours, minutes and seconds, stored as seconds. */
+export declare const DurationInput: WebUIComponent<DurationInputProps>
+
+export interface SelectInputProps<T = string> {
+  value: T
+  options: readonly { value: T; label: string }[]
+  onChange(value: T): void
+  /** Shown while the value is none of the options. Default 请选择 */
+  placeholder?: string
+  disabled?: boolean
+  /** Added to the button, e.g. a width */
+  className?: string
+}
+
+/** A dropdown in the WebUI's style; a `<select>` opens a list the browser draws in the system's. Values compare with `===`. */
+export declare function SelectInput<T = string>(props: SelectInputProps<T>): any
+
+/** Every plugin entry the WebUI lists, kept current; null until the list loads. */
+export declare function usePlugins(): PluginEntryStatus[] | null
+
+export interface BotInfo {
+  sid: string
+  platform: string
+  selfId: string
+  /** @satorijs/protocol Status: 0 offline, 1 online, 2 connecting, 3 disconnecting, 4 reconnecting */
+  status: number
+  name?: string
+  avatar?: string
+}
+
+/** The accounts plugins chat through (`ctx.bots` on the bot), kept current; null until the first answer. */
+export declare function useBots(): BotInfo[] | null
+
+export interface PageView {
+  /** Opened on its own, without the sidebar and header (`ctx.pageHref(id, { fullscreen: true })`). */
+  fullscreen: boolean
+}
+
+/** How the page being rendered is shown. */
+export declare function usePageView(): PageView
+
+/** The WebUI sidebar, e.g. for a page that wants the room. */
+export declare function useSidebar(): { collapsed: boolean; setCollapsed(collapsed: boolean): void }
+
+export interface StatusNoticeProps {
+  children?: unknown
+  /** Label of the button. */
+  action?: string
+  /** Id of the plugin page the button opens; no button while that page is open. */
+  page?: string
+}
+
+/**
+ * A notice at the top of one of the plugin's own pages, looking like the one the WebUI puts there while the plugin
+ * waits, failed or still wants settings. The WebUI has no notice bar for plugins: what concerns a plugin is said on
+ * its pages and its card.
+ */
+export declare const StatusNotice: WebUIComponent<StatusNoticeProps>
+
+export type SlotProps<K extends keyof SlotMap> = {
+  name: K
+  /** For a `keyed` slot: which key to draw. */
+  match?: string
+  /**
+   * What the slot shows by itself: while it has no contribution (`single`, `keyed`, or a `list` left empty), and
+   * innermost in a `chain`.
+   */
+  children?: unknown
+  /**
+   * Draws what goes around each contribution, e.g. a card; the contribution's error boundary is inside it. The
+   * WebUI's own slots do this for you.
+   */
+  wrap?: (element: unknown, contribution: { id: string; plugin: string; options: Record<string, unknown> }) => unknown
+} & ({} extends Omit<SlotMap[K]['props'], 'next'>
+  ? { props?: Omit<SlotMap[K]['props'], 'next'> }
+  : { props: Omit<SlotMap[K]['props'], 'next'> })
+
+/**
+ * Renders a slot this plugin declared, where it goes: the contributions of running plugins in order, minus what
+ * the user hid, each with the context of the plugin it comes from and in its own error boundary.
+ */
+export declare function Slot<K extends keyof SlotMap>(props: SlotProps<K>): any
+
+/**
+ * For a `keyed` slot: the keys a contribution draws right now (a running plugin's, not hidden). WebQQ uses it to
+ * show a message whose only elements are ones it cannot draw itself.
+ */
+export declare function useSlotMatches(name: keyof SlotMap): string[]
+
+/** An icon from the `llbot.icon` list by its lucide name; unknown names get the puzzle piece. */
+export declare const Icon: WebUIComponent<{ name?: string; size?: number; className?: string }>
+
+export interface PluginIconProps {
+  plugin: { iconUrl?: string; manifest: { icon?: string } }
+  /** Size and corners of the image or icon tile. */
+  className: string
+  /** Background and text classes used when the image is absent or fails to load. */
+  fill: string
+  size: number
+  /** Greys out the image of a plugin that is not running. */
+  muted?: boolean
+}
+
+/** The same package image, with an icon fallback, that the plugin page uses. */
+export declare const PluginIcon: WebUIComponent<PluginIconProps>
+
+export interface LightboxImage {
+  url: string
+  caption?: string
+}
+
+export interface LightboxProps {
+  images: LightboxImage[]
+  index: number
+  onIndex(index: number): void
+  onClose(): void
+}
+
+/** Displays an image gallery over the page, with keyboard navigation and a close button. */
+export declare const Lightbox: WebUIComponent<LightboxProps>

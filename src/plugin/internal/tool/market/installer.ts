@@ -1,0 +1,399 @@
+import { randomBytes } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises'
+import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
+import { promisify } from 'node:util'
+import { gunzip } from 'node:zlib'
+import { isInside } from '../../../host/manifest'
+import { recordPackageSwap, recoverPackageSwap } from '../../../host/shared-packages'
+import { matches, PackageVersion, Packument, parseSpec, pickVersion, RegistryClient, type PackageManifest } from './registry'
+import { extractPackage } from './tar'
+import type { LocalPackage } from './archive'
+
+const gunzipAsync = promisify(gunzip)
+
+/** Prefix of the installer's own directories in the plugin root; the scanner and the watcher skip dot names */
+const SCRATCH = '.market-'
+const MAX_DEPTH = 64
+const DOWNLOADS = 8
+
+// validate-npm-package-name without its length and reserved-name checks
+const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
+
+/** Registry packages are downloaded; local packages already have a validated directory on disk. */
+export type PackageSource = { manifest: PackageVersion; directory?: undefined } | LocalPackage
+
+export interface InstallProgress {
+  phase: 'planning' | 'downloading' | 'installing'
+  /** 0-100 when measurable */
+  percent?: number
+  detail: string
+}
+
+export interface InstallResult {
+  name: string
+  version: string
+  /** Packages with install scripts, which did not run: one needing a native build will fail to load */
+  scripts: string[]
+  /** Optional dependencies left out: made for another platform, or not found */
+  skipped: string[]
+  /** How many packages were written, the plugin included */
+  packages: number
+}
+
+interface Node {
+  /** The directory under node_modules: an alias's own name, not the package's */
+  alias: string
+  source: PackageSource
+  parent?: Node
+  children: Map<string, Node>
+}
+
+/**
+ * Installs plugin packages from a registry into a plugin root, the way npm would lay them out, without npm: the
+ * bot ships a bare node. Lifecycle scripts never run. Packages the host shares with every plugin (`shared`: cordis,
+ * the SDK, ...) are left out, the module hook resolves them to the host's copy anyway.
+ */
+export class Installer {
+  constructor(
+    private readonly registry: RegistryClient,
+    readonly root: string,
+    private readonly shared: ReadonlySet<string>,
+  ) {}
+
+  static validName(name: string): boolean {
+    return PACKAGE_NAME.test(name)
+  }
+
+  /** Where a package goes, or undefined for a name that is no package name */
+  target(name: string): string | undefined {
+    if (!Installer.validName(name)) return
+    const target = path.resolve(this.root, name)
+    return isInside(this.root, target) ? target : undefined
+  }
+
+  /** Lays `main` and its dependencies out in a scratch directory, then swaps it in for what was there. */
+  async install(
+    source: PackageSource,
+    replace: (apply: () => Promise<void>) => Promise<void> = apply => apply(),
+    onProgress?: (progress: InstallProgress) => void,
+  ): Promise<InstallResult> {
+    const main = source.manifest
+    const target = this.target(main.name)
+    if (!target) throw new Error(`invalid package name ${main.name}`)
+    await this.assertReal(target)
+    onProgress?.({ phase: 'planning', detail: '正在解析依赖…' })
+    const { root, skipped } = await this.plan(source, count => {
+      onProgress?.({ phase: 'planning', detail: `正在解析依赖（已发现 ${count} 个）…` })
+    })
+    await mkdir(this.root, { recursive: true })
+    const scratch = this.scratch()
+    try {
+      const nodes = layout(root, scratch)
+      const totalNodes = nodes.length
+      const fractions = new Float64Array(totalNodes)
+      let completed = 0
+      const emitDownload = (detail: string, percent?: number) => {
+        if (!onProgress) return
+        if (percent !== undefined) {
+          onProgress({ phase: 'downloading', percent, detail })
+          return
+        }
+        let sum = 0
+        for (let i = 0; i < totalNodes; i++) sum += fractions[i]
+        const pct = Math.min(92, Math.max(5, Math.round((sum / totalNodes) * 87) + 5))
+        onProgress({ phase: 'downloading', percent: pct, detail })
+      }
+      if (totalNodes === 1 && nodes[0].node.source.directory === undefined) {
+        emitDownload('正在下载插件包…', 5)
+      } else if (totalNodes > 1) {
+        emitDownload(`下载并解压依赖 0/${totalNodes}`, 5)
+      }
+      const extract = async ({ node, dir }: typeof nodes[number], index: number) => {
+        if (node.source.directory !== undefined) {
+          await renamePackage(node.source.directory, dir)
+          fractions[index] = 1
+          completed++
+          if (totalNodes > 1) emitDownload(`下载并解压依赖 ${completed}/${totalNodes}`)
+          return
+        }
+        const tarball = await this.registry.tarball(node.source.manifest, undefined, (loaded, total) => {
+          if (totalNodes === 1) {
+            if (total && total > 0) {
+              const ratio = Math.min(1, loaded / total)
+              emitDownload(`下载中 ${formatBytes(loaded)} / ${formatBytes(total)}`, Math.min(88, Math.max(5, Math.round(ratio * 85) + 3)))
+            } else {
+              emitDownload(`下载中 ${formatBytes(loaded)}`)
+            }
+          } else if (total && total > 0) {
+            fractions[index] = Math.min(0.85, (loaded / total) * 0.85)
+            emitDownload(`下载并解压依赖 ${completed}/${totalNodes}`)
+          }
+        })
+        if (totalNodes === 1) emitDownload('正在解压插件包…', 90)
+        const tar = await gunzipAsync(tarball)
+        await extractPackage(tar, dir)
+        fractions[index] = 1
+        completed++
+        if (totalNodes > 1) emitDownload(`下载并解压依赖 ${completed}/${totalNodes}`)
+      }
+      // Bundled files must be in place before downloaded dependencies, never racing to overwrite them.
+      await extract(nodes[0], 0)
+      await mapLimit(nodes.slice(1).map((entry, idx) => ({ entry, index: idx + 1 })), DOWNLOADS, ({ entry, index }) => extract(entry, index))
+      onProgress?.({ phase: 'installing', percent: 95, detail: '正在写入并加载…' })
+      await replace(() => this.swap(scratch, target))
+      return {
+        name: main.name,
+        version: main.version,
+        scripts: [...new Set(nodes.filter(({ node }) => hasScripts(node.source.manifest)).map(({ node }) => node.source.manifest.name))],
+        skipped,
+        packages: nodes.length,
+      }
+    } finally {
+      await rm(scratch, { recursive: true, force: true }).catch(() => {})
+    }
+  }
+
+  /** Moves the package away before deleting it, so a file held open fails the call before anything is lost. */
+  async uninstall(name: string): Promise<void> {
+    const target = this.target(name)
+    if (!target) throw new Error(`invalid package name ${name}`)
+    await this.assertReal(target)
+    if (!existsSync(target)) return
+    const away = this.scratch()
+    await renamePackage(target, away).catch((e) => {
+      throw busy(e, name)
+    })
+    await rm(away, { recursive: true, force: true }).catch(() => {})
+    const scope = path.dirname(target)
+    if (scope !== this.root && !(await readdir(scope)).length) await rm(scope, { recursive: true, force: true }).catch(() => {})
+  }
+
+  /** What a crash in the middle of an install left behind */
+  async cleanup(): Promise<void> {
+    if (!existsSync(this.root)) return
+    await recoverPackageSwap(this.root)
+    for (const name of await readdir(this.root)) {
+      if (name.startsWith(SCRATCH)) await rm(path.join(this.root, name), { recursive: true, force: true }).catch(() => {})
+    }
+  }
+
+  /**
+   * npm's tree, kept simple: a dependency goes to the plugin's own node_modules unless a different version is there
+   * already, then under the package that needs it. That never shadows what an earlier package resolved: a node's
+   * children are all placed before any of its descendants look them up.
+   */
+  private async plan(source: PackageSource, onDiscovered?: (count: number) => void): Promise<{ root: Node; skipped: string[] }> {
+    const root: Node = { alias: source.manifest.name, source, children: new Map() }
+    const skipped: string[] = []
+    const queue = [root]
+    let discovered = 0
+    // Each document once per install, asked for as soon as a package needing it is placed: the walk then rarely
+    // waits on the network one document at a time
+    const documents = new Map<string, Promise<Packument>>()
+    const packument = (name: string) => {
+      let document = documents.get(name)
+      if (!document) {
+        document = this.registry.packument(name)
+        document.catch(() => {})
+        documents.set(name, document)
+      }
+      return document
+    }
+    const prefetch = (manifest: PackageManifest) => {
+      for (const dep of dependenciesOf(manifest)) {
+        if (this.shared.has(dep.alias)) continue
+        try {
+          packument(parseSpec(dep.alias, dep.spec).name)
+        } catch {
+          // reported when its turn comes
+        }
+      }
+    }
+    prefetch(source.manifest)
+    for (let node = queue.shift(); node; node = queue.shift()) {
+      const manifest = node.source.manifest
+      if (depthOf(node) > MAX_DEPTH) throw new Error(`dependencies nest too deep at ${manifest.name}`)
+      for (const dep of dependenciesOf(manifest)) {
+        if (this.shared.has(dep.alias)) continue
+        let spec: { name: string; range: string }
+        try {
+          spec = parseSpec(dep.alias, dep.spec)
+        } catch (e) {
+          if (dep.optional) {
+            skipped.push(dep.alias)
+            continue
+          }
+          throw e
+        }
+        const existing = lookup(node, dep.alias)
+        if (existing && existing.source.manifest.name === spec.name && matches(existing.source.manifest.version, spec.range)) continue
+        const version = await packument(spec.name)
+          // A mirror behind on this package: the registries after it may have a version that fits
+          .then(document => pickVersion(document, spec.range)
+            ?? this.registry.packument(spec.name, false, document => !!pickVersion(document, spec.range))
+              .then(document => pickVersion(document, spec.range)))
+          .catch((e) => {
+            if (dep.optional) return undefined
+            throw e
+          })
+        if (!version || !fitsPlatform(version)) {
+          if (dep.optional) {
+            skipped.push(dep.alias)
+            continue
+          }
+          if (!version) throw new Error(`${manifest.name} needs ${spec.name}@${spec.range}, which has no matching version`)
+          throw new Error(`${manifest.name} needs ${spec.name}@${version.version}, which is not made for ${process.platform}-${process.arch}`)
+        }
+        const child: Node = { alias: dep.alias, source: { manifest: version }, children: new Map() }
+        // Another version on the way up: only right under this node does this one come first
+        const parent = existing ? node : root
+        child.parent = parent
+        parent.children.set(dep.alias, child)
+        queue.push(child)
+        discovered++
+        if (onDiscovered && (discovered <= 5 || discovered % 5 === 0)) onDiscovered(discovered)
+        prefetch(version)
+      }
+    }
+    return { root, skipped }
+  }
+
+  private async swap(scratch: string, target: string) {
+    await mkdir(path.dirname(target), { recursive: true })
+    const old = existsSync(target) ? this.scratch() : undefined
+    await recordPackageSwap(this.root, target, scratch, old)
+    if (old) {
+      await renamePackage(target, old).catch((e) => {
+        throw busy(e, path.basename(target))
+      })
+    }
+    try {
+      await renamePackage(scratch, target)
+    } catch (e) {
+      if (old) await renamePackage(old, target).catch(() => {})
+      throw busy(e, path.basename(target))
+    }
+    await recoverPackageSwap(this.root)
+  }
+
+  /** A link (a plugin under development, say) is the user's own: the market neither replaces nor deletes it */
+  private async assertReal(target: string) {
+    const stat = await lstat(target).catch(() => undefined)
+    if (stat?.isSymbolicLink()) throw new Error(`${target} is a link; the market leaves linked packages alone`)
+    const scope = path.dirname(target)
+    if (scope !== this.root && (await lstat(scope).catch(() => undefined))?.isSymbolicLink()) {
+      throw new Error(`${scope} is a link; the market leaves linked packages alone`)
+    }
+  }
+
+  private scratch() {
+    return path.join(this.root, `${SCRATCH}${randomBytes(4).toString('hex')}`)
+  }
+}
+
+/** Windows scanners can briefly hold newly extracted files. Persistent locks still fail without replacing the package. */
+async function renamePackage(source: string, target: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(source, target)
+      return
+    } catch (error) {
+      if (process.platform !== 'win32' || attempt >= 5
+        || !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+      await delay(50 * 2 ** attempt)
+    }
+  }
+}
+
+function busy(error: unknown, name: string): Error {
+  const code = (error as NodeJS.ErrnoException).code
+  if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') {
+    return new Error(`${name} has files in use (a native module, most likely); restart the bot and try again`)
+  }
+  return error as Error
+}
+
+function dependenciesOf(manifest: PackageManifest): { alias: string; spec: string; optional: boolean }[] {
+  // Bundled ones come inside the tarball; `true` bundles them all
+  const bundle = manifest.bundleDependencies ?? manifest.bundledDependencies
+  if (bundle === true) return []
+  const bundled = new Set(Array.isArray(bundle) ? bundle : [])
+  const deps = new Map<string, { alias: string; spec: string; optional: boolean }>()
+  // These belong to the host's plugin list and are resolved by Market before installation. Even if an author
+  // also lists one under npm dependencies, it must never become an unregistered copy in node_modules.
+  const plugins = new Set(Object.keys((manifest.llbot as { dependencies?: Record<string, string> } | undefined)?.dependencies ?? {}))
+  for (const [alias, spec] of Object.entries(manifest.dependencies ?? {})) deps.set(alias, { alias, spec, optional: false })
+  // npm lists an optional dependency in both; the optional entry wins
+  for (const [alias, spec] of Object.entries(manifest.optionalDependencies ?? {})) deps.set(alias, { alias, spec, optional: true })
+  return [...deps.values()].filter(dep => !bundled.has(dep.alias) && !plugins.has(dep.alias))
+}
+
+function lookup(node: Node, alias: string): Node | undefined {
+  for (let current: Node | undefined = node; current; current = current.parent) {
+    const found = current.children.get(alias)
+    if (found) return found
+  }
+}
+
+function depthOf(node: Node): number {
+  let depth = 0
+  for (let current = node.parent; current; current = current.parent) depth++
+  return depth
+}
+
+function layout(root: Node, dir: string): { node: Node; dir: string }[] {
+  const result = [{ node: root, dir }]
+  for (const child of root.children.values()) result.push(...layout(child, path.join(dir, 'node_modules', child.alias)))
+  return result
+}
+
+function hasScripts(manifest: PackageManifest): boolean {
+  if (manifest.hasInstallScript) return true
+  const scripts = manifest.scripts ?? {}
+  return !!(scripts.preinstall || scripts.install || scripts.postinstall)
+}
+
+function fitsPlatform(manifest: PackageVersion): boolean {
+  return fits(manifest.os, process.platform) && fits(manifest.cpu, process.arch) && (process.platform !== 'linux' || fits(manifest.libc, libc()))
+}
+
+/** npm's `os` / `cpu` / `libc` lists: names, or `!name` to exclude one */
+function fits(list: string[] | undefined, value: string): boolean {
+  if (!Array.isArray(list) || !list.length) return true
+  if (list.includes(`!${value}`)) return false
+  const allowed = list.filter(item => !item.startsWith('!'))
+  return !allowed.length || allowed.includes(value)
+}
+
+let libcName: string | undefined
+
+function libc(): string {
+  libcName ??= (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header?.glibcVersionRuntime ? 'glibc' : 'musl'
+  return libcName
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+/** Stops at the first failure, but only rejects once the tasks under way are done: the caller deletes their directory */
+async function mapLimit<T>(items: T[], limit: number, task: (item: T) => Promise<void>) {
+  let next = 0
+  let failed = false
+  const workers = await Promise.allSettled(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (!failed && next < items.length) {
+      try {
+        await task(items[next++])
+      } catch (e) {
+        failed = true
+        throw e
+      }
+    }
+  }))
+  const rejected = workers.find((worker): worker is PromiseRejectedResult => worker.status === 'rejected')
+  if (rejected) throw rejected.reason
+}

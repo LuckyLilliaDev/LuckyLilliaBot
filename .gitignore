@@ -10,6 +10,7 @@ package-lock.json
 node_modules
 dist
 out
+/output/
 data
 *.tsbuildinfo
 
@@ -27,11 +28,20 @@ v2-login-qr.png
 sse-capture.jsonl
 test/fixtures/pmhq-flash/
 
+AGENTS.md
+
 # 测试时 nohup tsx watch 输出
-logs/
+/logs/
 
 # playwright-cli 运行产物 (console log / 页面快照)
 .playwright-cli/
 
-# SignProxy dev build (npm run build:dev-bot), loaded only with --dev; never commit or ship it
-src/main/qqProtocol/direct-lib/sign-proxy/sign-proxy-dev.*
+# plugin SDK build output
+packages/*/lib/
+test/fixtures/plugins/*/lib/
+/_integration/
+
+# Generated reports and media from local OneBot integration runs
+/test/onebot11-api-test/test-full.log
+/test/onebot11-api-test/test-report.html
+/test/onebot11-api-test/tests/media/generated/

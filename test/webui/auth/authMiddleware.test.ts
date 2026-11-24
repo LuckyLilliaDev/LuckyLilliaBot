@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Hono } from 'hono'
-import { hashPassword } from '@/webui/BE/passwordHash'
+import { hashPassword } from '@/plugin/internal/service/webui/BE/passwordHash'
 
 vi.mock('@/main/config', () => ({
   webuiTokenUtil: {
@@ -16,9 +16,6 @@ vi.mock('@/main/config', () => ({
 import { webuiTokenUtil } from '@/main/config'
 
 function createAuthApp() {
-  // 每次都重新 import authMiddleware，这样模块级状态（globalLoginAttempt）会被重置
-  // 但由于 vitest 缓存模块，我们需要用 vi.resetModules() + dynamic import
-  // 这里我们直接构建 app，每个 describe 块用 resetModules 隔离
   const app = new Hono()
   app.use('*', async (c, next) => {
     c.env = { incoming: { socket: { remoteAddress: '127.0.0.1' } } } as any
@@ -31,8 +28,9 @@ describe('authMiddleware', () => {
   let authMiddleware: any
 
   beforeEach(async () => {
+    // authMiddleware 有模块级状态 (globalLoginAttempt), 每个用例重新 import 一份
     vi.resetModules()
-    const mod = await import('@/webui/BE/auth')
+    const mod = await import('@/plugin/internal/service/webui/BE/auth')
     authMiddleware = mod.authMiddleware
   })
 
@@ -121,6 +119,19 @@ describe('authMiddleware', () => {
       expect(body.remainingAttempts).toBeDefined()
       expect(body.remainingAttempts).toBe(3)
     })
+
+    it('marks its own refusals, so that the WebUI only asks for the password on those', async () => {
+      const app = createAuthApp()
+      app.use('*', authMiddleware)
+      app.get('/test', (c) => c.json({ ok: true }))
+      app.get('/forbidden', (c) => c.json({ success: false, message: 'not for you' }, 403))
+
+      expect((await app.request('/test')).headers.get('X-Webui-Auth')).toBe('required')
+      expect((await app.request('/test', { headers: { 'X-Webui-Token': 'wrong' } })).headers.get('X-Webui-Auth')).toBe('wrong')
+      const own = await app.request('/forbidden', { headers: { 'X-Webui-Token': hashPassword(TOKEN) } })
+      expect(own.status).toBe(403)
+      expect(own.headers.get('X-Webui-Auth')).toBeNull()
+    })
   })
 
   describe('rate limiting and lockout', () => {
@@ -147,9 +158,11 @@ describe('authMiddleware', () => {
         headers: { 'X-Webui-Token': 'wrong' },
       })
       expect(res.status).toBe(403)
+      expect(res.headers.get('X-Webui-Auth')).toBe('locked')
       const body = await res.json()
       expect(body.locked).toBe(true)
       expect(body.remainingMinutes).toBe(60)
+      expect(body.message).toContain('连续错误4次')
     })
 
     it('rejects correct token during lockout', async () => {

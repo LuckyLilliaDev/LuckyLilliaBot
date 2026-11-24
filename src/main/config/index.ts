@@ -1,13 +1,16 @@
 import { Context, Service } from 'cordis'
-import { DATA_DIR, selfInfo } from '@/common/globalVars'
-import { defaultConfig } from './defaultConfig'
+import { DATA_DIR } from '@/common/globalVars'
 import { Config as LLBotConfig, WebUIConfig } from '@/common/types'
 import { Dict } from 'cosmokit'
 import path from 'node:path'
 import fs from 'node:fs'
-import JSON5 from 'json5'
-import { mergeNewProperties } from '@/common/utils'
-import { getSpecifiedUin, isDevMode } from '@/common/utils/environment'
+import { deepMerge, mergeNewProperties } from '@/common/utils'
+import { JsonFile } from '@/common/jsonFile'
+import { isDevMode } from '@/common/utils/environment'
+import { configPaths } from '@/common/configPaths'
+import { DEPRECATED_KEYS, templateConfig, upgradeConfig } from './upgrade'
+import { version } from '@/version'
+import { applyLegacyConfig, legacyConfig } from './legacyConfig'
 
 declare module 'cordis' {
   interface Context {
@@ -15,269 +18,241 @@ declare module 'cordis' {
   }
 }
 
+const port = (raw: string) => (/^\d+$/.test(raw.trim()) && +raw <= 65535 ? +raw : undefined)
+
+/**
+ * 进程级覆盖: 启动参数 > 环境变量 > 文件, 容器/托管环境用它定端口和日志级别, 值只进内存不落盘。
+ * 启动参数两种写法都认: `--webui-port 3081` / `--webui-port=3081`
+ */
+const ENV_OVERRIDES: { env: string; arg?: string; path: string[]; parse: (raw: string) => unknown }[] = [
+  { env: 'LLBOT_WEBUI_HOST', path: ['webui', 'host'], parse: raw => raw },
+  { env: 'LLBOT_WEBUI_PORT', arg: '--webui-port', path: ['webui', 'port'], parse: port },
+  { env: 'LLBOT_LOG_LEVEL', path: ['logLevel'], parse: raw => (['debug', 'info', 'warn', 'error'].includes(raw) ? raw : undefined) },
+]
+
+interface EnvLock {
+  /** 给出这个值的启动参数 (`-` 开头) 或环境变量 */
+  by: string
+  /** 文件里这个字段的值, 每次落盘前还原回去 */
+  disk: unknown
+  /** 启动参数或环境变量给的值, get() 报告的就是它 */
+  value: unknown
+}
+
+/** A flag's value: `--name value` or `--name=value`; a missing value is not taken from the next flag */
+function argValue(argv: string[], name: string): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === name) return argv[i + 1] !== undefined && !argv[i + 1].startsWith('-') ? argv[i + 1] : ''
+    if (argv[i].startsWith(`${name}=`)) return argv[i].slice(name.length + 1)
+  }
+}
+
+/** Said once per process: a reload runs the overlay again */
+const warned = new Set<string>()
+
+function parentOf(root: unknown, keys: string[]): Dict | undefined {
+  let node = root
+  for (const key of keys.slice(0, -1)) {
+    if (!node || typeof node !== 'object') return
+    node = (node as Dict)[key]
+  }
+  return node && typeof node === 'object' ? node as Dict : undefined
+}
+
+/**
+ * 把启动参数和当前进程的 LLBOT_* 原地叠到 config 上, 返回每个被覆盖字段的锁记录。值不合法的忽略 (启动参数的
+ * 报一次警告), 有效的启动参数盖过环境变量。
+ */
+function overlayEnv(config: LLBotConfig, warn: (message: string) => void): Map<string, EnvLock> {
+  const locks = new Map<string, EnvLock>()
+  for (const { env, arg, path: keys, parse } of ENV_OVERRIDES) {
+    const parent = parentOf(config, keys)
+    if (!parent) continue
+    const flag = arg === undefined ? undefined : argValue(process.argv, arg)
+    const raw = process.env[env]
+    let source = { by: env, value: raw ? parse(raw) : undefined }
+    if (arg && flag !== undefined) {
+      const value = parse(flag)
+      if (value !== undefined) source = { by: arg, value }
+      else if (!warned.has(arg)) {
+        warned.add(arg)
+        warn(`启动参数 ${arg} 的值「${flag}」不能用，忽略`)
+      }
+    }
+    if (source.value === undefined) continue
+    const leaf = keys[keys.length - 1]
+    locks.set(keys.join('.'), { by: source.by, disk: parent[leaf], value: source.value })
+    parent[leaf] = source.value
+  }
+  if (process.argv.includes('--debug')) {
+    const previous = locks.get('logLevel')
+    locks.set('logLevel', { by: '--debug', disk: previous ? previous.disk : config.logLevel, value: 'debug' })
+    config.logLevel = 'debug'
+  }
+  return locks
+}
+
+/**
+ * The bot's own settings: one file per instance, data/instances/<name>/settings.json (config-storage §7),
+ * bound when the service starts and kept across logins. get() hands out the file plus the launch's overrides
+ * (`--webui-port`, LLBOT_*).
+ */
 export default class Config extends Service {
-  private configPath: string | undefined
+  readonly version = version
   private config: LLBotConfig | null = null
   private watching = false
-  private skipNextWatch = false
-  private defaultConfigPath = path.join(import.meta.dirname, 'default_config.json')
+  private readonly json: JsonFile<Dict>
+  /** 被启动参数或 LLBOT_* 覆盖的字段, 按路径 ('webui.port') 索引 */
+  private envLocked = new Map<string, EnvLock>()
   private logger
   private readonly WATCH_DEBOUNCE_MS = 2000
-  /** 保存 fs.watchFile 的回调引用，用于 unwatchFile 清理 */
-  private watchFileListener?: (curr: fs.Stats, prev: fs.Stats) => void
+  private unwatch: (() => void)[] = []
 
   constructor(ctx: Context) {
     super(ctx, 'config')
     this.logger = ctx.logger('config')
+    this.json = new JsonFile<Dict>(configPaths.settings(), { defaultValue: () => ({}) })
   }
 
   async [Service.init]() {
     return () => {
-      if (this.configPath && this.watchFileListener) {
-        fs.unwatchFile(this.configPath, this.watchFileListener)
-        this.watchFileListener = undefined
-      }
+      this.unwatch.forEach(stop => stop())
+      this.unwatch = []
     }
   }
 
-  listenChange(cb: (config: LLBotConfig) => void) {
-    this.logger.info('配置文件位于', this.configPath)
+  get file(): string {
+    return this.json.file
+  }
 
-    this.config = this.get()
-    if (this.configPath) {
-      let lastReloadTime = 0
-      this.watchFileListener = () => {
-        if (!this.watching) return
-        if (this.skipNextWatch) {
-          this.skipNextWatch = false
-          return
-        }
-        // 防止 fs.watchFile 短时间内多次触发
-        const now = Date.now()
-        if (now - lastReloadTime < this.WATCH_DEBOUNCE_MS) return
-        lastReloadTime = now
-        this.logger.info('配置重載')
-        const c = this.reloadConfig()
-        cb(c)
-      }
-      fs.watchFile(this.configPath, { persistent: false, interval: 1000 }, this.watchFileListener)
-      setTimeout(() => this.watching = true, 1500)
+  /** Compatibility API for independently distributed protocol adapters. */
+  getLegacy() {
+    return legacyConfig(this.ctx)
+  }
+
+  patchLegacy(partial: Dict, options: { rules?: boolean } = {}): Promise<void> {
+    return applyLegacyConfig(this.ctx, partial, options)
+  }
+
+  listenChange(cb: (config: LLBotConfig) => void) {
+    this.get()
+    this.logger.info('配置文件位于', this.json.file)
+    let lastReloadTime = 0
+    const listener = () => {
+      if (!this.watching) return
+      if (this.json.isSelfWriteOnDisk()) return
+      // 防止 fs.watchFile 短时间内多次触发
+      const now = Date.now()
+      if (now - lastReloadTime < this.WATCH_DEBOUNCE_MS) return
+      lastReloadTime = now
+      this.logger.info('配置重載')
+      cb(this.reloadConfig())
     }
+    fs.watchFile(this.json.file, { persistent: false, interval: 1000 }, listener)
+    this.unwatch.push(() => fs.unwatchFile(this.json.file, listener))
+    setTimeout(() => this.watching = true, 1500)
   }
 
   get(cache = true) {
     if (this.config && cache) {
       return this.config
     }
-
-    // 登录前 selfInfo.uin 为空: 若 argv 带了 -q <uin> 且对应 config_<uin>.json 已存在, 提前用它
-    // (让 WebUI/logLevel 直接起在目标账号配置上, 免去登录后从 default 端口/token 重启的窗口)。
-    // 只读不建文件: 新账号 (文件不存在) 仍走 default, 建文件留给登录成功后的 get(false)。
-    let uin = selfInfo.uin
-    if (!uin) {
-      const argUin = getSpecifiedUin()
-      if (argUin && fs.existsSync(path.join(DATA_DIR, `config_${argUin}.json`))) {
-        uin = argUin
-      }
-    }
-    this.configPath = uin ? path.join(DATA_DIR, `config_${uin}.json`) : undefined
-
     return this.reloadConfig()
   }
 
-  private getDefaultConfig(): LLBotConfig {
-    const _defaultConfig = { ...defaultConfig }
-    const defaultConfigFromFile = fs.readFileSync(this.defaultConfigPath, 'utf-8')
-    try {
-      const parsedDefaultConfig: LLBotConfig = JSON5.parse(defaultConfigFromFile)
-      Object.assign(_defaultConfig, parsedDefaultConfig)
-    } catch (e) {
-      this.logger.error('解析 default_config.json 错误', e)
+  private reloadConfig(): LLBotConfig {
+    let data: Dict
+    if (!fs.existsSync(this.json.file)) {
+      data = this.templateConfig()
+    } else {
+      const { data: read, error } = this.json.readSync()
+      if (error) {
+        // 坏文件不覆盖, 也不广播 default
+        this.logger.error(`${this.json.file} json 内容不合格, 继续使用上一份有效配置`, error)
+        if (this.config) return this.config
+        const config = this.templateConfig()
+        this.envLocked = overlayEnv(config, message => this.logger.warn(message))
+        return config
+      }
+      this.logger.info('配置加载成功')
+      data = read
     }
-    return _defaultConfig
+    const config = upgradeConfig(data)
+    // 只补不删, 未知 key 保留
+    mergeNewProperties(this.templateConfig(), config)
+    config.webui = this.migrateWebUIToken(config.webui)
+    for (const key of DEPRECATED_KEYS) delete (config as Dict)[key]
+    // 还没叠环境变量, 不经 stripEnv: 它用上次加载的原值, 会把外部刚改的锁定字段写回旧值
+    this.writeIfChanged(config)
+    this.envLocked = overlayEnv(config, message => this.logger.warn(message))
+    this.config = config
+    return config
   }
 
-  private reloadConfig(): LLBotConfig {
-    if (!this.configPath) {
-      return this.getDefaultConfig()
+  private templateConfig(): LLBotConfig {
+    return templateConfig(e => this.logger.error('解析 default_config.json 错误', e))
+  }
+
+  /** An untouched file keeps its mtime and fires no watcher. */
+  private writeIfChanged(config: LLBotConfig) {
+    if (JSON.stringify(config, null, 2) + '\n' !== this.json.rawSync()) this.json.writeSync(config as unknown as Dict)
+  }
+
+  /** 被环境变量覆盖的字段还原成磁盘原值 */
+  private stripEnv(config: LLBotConfig): LLBotConfig {
+    if (!this.envLocked.size) return config
+    const clone = structuredClone(config)
+    for (const [key, { disk }] of this.envLocked) {
+      const keys = key.split('.')
+      const parent = parentOf(clone, keys)
+      if (!parent) continue
+      const leaf = keys[keys.length - 1]
+      if (disk === undefined) delete parent[leaf]
+      else parent[leaf] = disk
     }
-    if (!fs.existsSync(this.configPath)) {
-      this.config = this.getDefaultConfig()
-      this.set(this.config)
-      return this.config
+    return clone
+  }
+
+  /** 内存里的锁定字段始终是环境变量的值, 不管调用方传进来什么。 */
+  private pinEnv(config: LLBotConfig) {
+    for (const [key, { value }] of this.envLocked) {
+      const keys = key.split('.')
+      const parent = parentOf(config, keys)
+      if (parent) parent[keys[keys.length - 1]] = value
     }
-    else {
-      const data = fs.readFileSync(this.configPath, 'utf-8')
-      let jsonData: LLBotConfig = defaultConfig
-      try {
-        jsonData = JSON5.parse(data)
-        this.logger.info('配置加载成功')
-        jsonData = this.migrateConfig(jsonData)
-        mergeNewProperties(defaultConfig, jsonData)
-        jsonData.webui = this.migrateWebUIToken(jsonData.webui)
-        jsonData = this.cleanupConfig(defaultConfig, jsonData) as LLBotConfig
-        // 只在配置内容实际变化时才写入文件，避免触发 watchFile 导致无限重载
-        const newData = JSON.stringify(jsonData, null, 2)
-        if (newData !== data) {
-          this.set(jsonData)
-        }
-        this.config = jsonData
-        return this.config
-      } catch (e) {
-        this.logger.error(`${this.configPath} json 内容不合格`, e)
-        this.config = this.getDefaultConfig()
-        return this.config
-      }
+  }
+
+  envLocks(): { path: string; by: string }[] {
+    return [...this.envLocked].map(([path, { by }]) => ({ path, by }))
+  }
+
+  envLockedPaths(): string[] {
+    return [...this.envLocked.keys()]
+  }
+
+  /** patch() 会得到的配置, 不落盘, 供校验用。锁定字段先从 partial 剔除, 否则会盖掉环境变量的值 */
+  preview(partial: Dict): LLBotConfig {
+    const cleaned = structuredClone(partial)
+    for (const key of this.envLocked.keys()) {
+      const keys = key.split('.')
+      const parent = parentOf(cleaned, keys)
+      if (parent) delete parent[keys[keys.length - 1]]
     }
+    return deepMerge(this.get(), cleaned) as LLBotConfig
+  }
+
+  /** 对象逐 key 合并, 数组和标量整体替换 */
+  patch(partial: Dict): LLBotConfig {
+    const next = this.preview(partial)
+    this.set(next)
+    return next
   }
 
   set(config: LLBotConfig) {
     this.config = config
-    this.writeConfig(config)
-  }
-
-  private writeConfig(config: LLBotConfig) {
-    if (!this.configPath) {
-      return
-    }
-    // 跳过本次自身写入触发的 watchFile 回调
-    this.skipNextWatch = true
-    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf-8')
-  }
-
-
-  /**
-   * 递归清理配置对象，以 defaultConfig 为基准，删除 oldConfig 中不存在于 defaultConfig 的 key
-   */
-  private cleanupConfig(defaultConfig: Dict, oldConfig: Dict): Dict {
-    // 如果不是对象，直接返回
-    if (typeof defaultConfig !== 'object' || defaultConfig === null || Array.isArray(defaultConfig)) {
-      return oldConfig
-    }
-    if (typeof oldConfig !== 'object' || oldConfig === null) {
-      return oldConfig
-    }
-
-    const cleaned: Dict = {}
-
-    // 遍历 defaultConfig 的 key
-    for (const key in defaultConfig) {
-      if (defaultConfig.hasOwnProperty(key)) {
-        // 如果 oldConfig 中存在该 key
-        if (oldConfig.hasOwnProperty(key)) {
-          const defaultValue = defaultConfig[key]
-          const oldValue = oldConfig[key]
-
-          // 如果 defaultValue 是普通对象（非数组），递归清理
-          if (
-            typeof defaultValue === 'object' &&
-            defaultValue !== null &&
-            !Array.isArray(defaultValue) &&
-            typeof oldValue === 'object' &&
-            oldValue !== null &&
-            !Array.isArray(oldValue)
-          ) {
-            cleaned[key] = this.cleanupConfig(defaultValue, oldValue)
-          } else {
-            // 否则直接使用 oldConfig 的值
-            cleaned[key] = oldValue
-          }
-        } else {
-          // oldConfig 中不存在该 key，使用 defaultConfig 的值
-          cleaned[key] = defaultConfig[key]
-        }
-      }
-    }
-
-    return cleaned
-  }
-
-  private migrateConfig(oldConfig: Dict): LLBotConfig {
-    let migratedConfig = oldConfig
-    if (oldConfig.musicSignUrl && oldConfig.musicSignUrl.includes('linyuchen')) {
-      oldConfig.musicSignUrl = defaultConfig.musicSignUrl
-    }
-    // 先迁移 ob11.connect 数组格式
-    if (!oldConfig.ob11 || !Array.isArray(oldConfig.ob11.connect)) {
-      const ob11 = oldConfig.ob11 || {}
-      migratedConfig = {
-        ...oldConfig,
-        ob11: {
-          enable: ob11.enable || false,
-          connect: [
-            {
-              type: 'ws',
-              enable: ob11.enableWs || false,
-              port: ob11.wsPort || 3001,
-              heartInterval: oldConfig.heartInterval || 30000,
-              token: ob11.token || '',
-              messageFormat: ob11.messagePostFormat || 'array',
-              reportSelfMessage: ob11.reportSelfMessage || false,
-              reportOfflineMessage: oldConfig.receiveOfflineMsg || false,
-              debug: oldConfig.debug || false,
-            },
-            {
-              type: 'ws-reverse',
-              enable: ob11.enableWsReverse || false,
-              url: (ob11.wsReverseUrls && ob11.wsReverseUrls[0]) || '',
-              heartInterval: oldConfig.heartInterval || 30000,
-              token: ob11.token || '',
-              messageFormat: ob11.messagePostFormat || 'array',
-              reportSelfMessage: ob11.reportSelfMessage || false,
-              reportOfflineMessage: oldConfig.receiveOfflineMsg || false,
-              debug: oldConfig.debug || false,
-            },
-            {
-              type: 'http',
-              enable: ob11.enableHttp || false,
-              port: ob11.httpPort || 3000,
-              token: ob11.token || '',
-              messageFormat: ob11.messagePostFormat || 'array',
-              reportSelfMessage: ob11.reportSelfMessage || false,
-              reportOfflineMessage: oldConfig.receiveOfflineMsg || false,
-              debug: oldConfig.debug || false,
-            },
-            {
-              type: 'http-post',
-              enable: ob11.enableHttpPost || false,
-              url: (ob11.httpPostUrls && ob11.httpPostUrls[0]) || '',
-              enableHeart: ob11.enableHttpHeart || false,
-              heartInterval: oldConfig.heartInterval || 30000,
-              token: ob11.httpSecret || '',
-              messageFormat: ob11.messagePostFormat || 'array',
-              reportSelfMessage: ob11.reportSelfMessage || false,
-              reportOfflineMessage: oldConfig.receiveOfflineMsg || false,
-              debug: oldConfig.debug || false,
-            },
-          ],
-        },
-      }
-    }
-
-    // 迁移 onlyLocalhost 配置项
-    if ('onlyLocalhost' in oldConfig) {
-      const host = oldConfig.onlyLocalhost ? '127.0.0.1' : ''
-
-      if (migratedConfig.webui && !migratedConfig.webui.host) {
-        migratedConfig.webui.host = host
-      }
-      if (migratedConfig.satori && !migratedConfig.satori.host) {
-        migratedConfig.satori.host = host
-      }
-      if (migratedConfig.milky?.http && !migratedConfig.milky.http.host) {
-        migratedConfig.milky.http.host = host
-      }
-      if (Array.isArray(migratedConfig.ob11?.connect)) {
-        for (const conn of migratedConfig.ob11.connect) {
-          if ((conn.type === 'ws' || conn.type === 'http') && !conn.host) {
-            conn.host = host
-          }
-        }
-      }
-      delete migratedConfig.onlyLocalhost
-    }
-
-    return migratedConfig as LLBotConfig
+    // 不把环境变量的值固化进文件
+    this.writeIfChanged(this.stripEnv(config))
+    this.pinEnv(config)
   }
 
   private migrateWebUIToken(oldWebuiConfig: WebUIConfig & { token?: string }) {
@@ -289,29 +264,41 @@ export default class Config extends Service {
   }
 }
 
-class WebUITokenUtil {
+export class WebUITokenUtil {
   private token: string = ''
+  private mtimeMs = -1
 
-  constructor(private readonly tokenPath: string) {
-    this.tokenPath = tokenPath
-  }
+  /** The path is looked up on use: it depends on the instance, which is only fixed after the startup migration. */
+  constructor(private readonly tokenPath: () => string) {}
 
+  /**
+   * Re-read whenever the file changed: the desktop app or a hand edit can reset the password while the bot
+   * runs. A file that went missing keeps the last password rather than opening the WebUI to everyone.
+   */
   getToken() {
-    if (!this.token) {
-      if (fs.existsSync(this.tokenPath)) {
-        this.token = fs.readFileSync(this.tokenPath, 'utf-8').trim()
-      }
+    let mtimeMs: number
+    try {
+      mtimeMs = fs.statSync(this.tokenPath()).mtimeMs
+    } catch {
+      return this.token
+    }
+    if (mtimeMs !== this.mtimeMs) {
+      this.token = fs.readFileSync(this.tokenPath(), 'utf-8').trim()
+      this.mtimeMs = mtimeMs
     }
     return this.token
   }
 
   setToken(token: string) {
     this.token = token.trim()
-    fs.writeFileSync(this.tokenPath, token, 'utf-8')
+    const file = this.tokenPath()
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, token, 'utf-8')
+    this.mtimeMs = fs.statSync(file).mtimeMs
   }
 }
 
-export const webuiTokenUtil = new WebUITokenUtil(path.join(DATA_DIR, 'webui_token.txt'))
+export const webuiTokenUtil = new WebUITokenUtil(() => configPaths.webuiToken())
 
 // data/auth_token.txt (--dev: data/auth_token.dev.txt, keeps the local-manager token apart from the real one)
 class AuthTokenUtil {
@@ -350,5 +337,3 @@ class AuthTokenUtil {
 }
 
 export const authTokenUtil = new AuthTokenUtil(path.join(DATA_DIR, isDevMode() ? 'auth_token.dev.txt' : 'auth_token.txt'))
-
-

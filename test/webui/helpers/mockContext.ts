@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { deepMerge } from '@/common/utils/misc'
 
 export function createMockContext() {
   const services: Record<string, any> = {
@@ -45,6 +46,9 @@ export function createMockContext() {
       getPttUrl: vi.fn(),
     },
     qqProtocol: {
+      selfInfo: { uid: 'test-uid', uin: '123456', nick: 'TestBot', online: true },
+      authTokenStatus: { hasToken: true, validation: 'valid', message: '', loginError: '' },
+      checkAuthToken: vi.fn(),
       getQQResourceUsage: vi.fn(() => Promise.resolve({
         memory: 500000000,
         totalMemory: 8000000000,
@@ -66,6 +70,10 @@ export function createMockContext() {
         webui: { enable: true, host: '0.0.0.0', port: 3080 },
       })),
       set: vi.fn(),
+      preview: vi.fn((partial: object) => deepMerge(services.config.get(), partial)),
+      patch: vi.fn((partial: object) => deepMerge(services.config.get(), partial)),
+      envLocks: vi.fn(() => [] as { path: string; env: string }[]),
+      envLockedPaths: vi.fn(() => [] as string[]),
     },
   }
 
@@ -83,7 +91,7 @@ export function createMockContext() {
       return v !== undefined ? v : (ctx as any)[key]
     }),
     on: vi.fn(() => vi.fn()),
-    parallel: vi.fn(),
+    parallel: vi.fn(() => Promise.resolve()),
   } as any
 
   return ctx

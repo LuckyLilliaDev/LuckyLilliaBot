@@ -12,28 +12,28 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cordisjs/plugin-database-sqlite@npm:^5.1.1":
-  version: 5.1.1
-  resolution: "@cordisjs/plugin-database-sqlite@npm:5.1.1"
+"@cordisjs/plugin-database-sqlite@npm:^5.2.0":
+  version: 5.2.0
+  resolution: "@cordisjs/plugin-database-sqlite@npm:5.2.0"
   dependencies:
-    "@cordisjs/sql-utils": "npm:^6.1.1"
+    "@cordisjs/sql-utils": "npm:^6.2.0"
     cosmokit: "npm:^1.8.1"
     schemastery: "npm:^3.18.0"
   peerDependencies:
-    "@cordisjs/plugin-database": ^4.1.1
-    cordis: ^4.0.0-rc.7
-  checksum: 10c0/eeaa009cbed49b9f4316466904c2d1abf9c7750ae7f012f44924ca77e17ba457d46e0de22648653bfd194282136c6bbed5f2d44c8c1fed2551dc854b3fee3205
+    "@cordisjs/plugin-database": ^4.2.0
+    cordis: ^4.0.0-rc.10
+  checksum: 10c0/3164c7ca82ccd7426f09c8dc992e75ed234df75a69bcdaf015961b521d2bf5957652ea9d40ef7f06124c898552c7c962f71e9d230e9eda1f0cb0a9a68739ea94
   languageName: node
   linkType: hard
 
-"@cordisjs/plugin-database@npm:^4.1.1":
-  version: 4.1.1
-  resolution: "@cordisjs/plugin-database@npm:4.1.1"
+"@cordisjs/plugin-database@npm:^4.2.0":
+  version: 4.2.0
+  resolution: "@cordisjs/plugin-database@npm:4.2.0"
   dependencies:
     cosmokit: "npm:^1.8.1"
   peerDependencies:
-    cordis: ^4.0.0-rc.7
-  checksum: 10c0/600e02192b5f25a72413352e7c7ca519867e812ff10fefbf21b213d54f793a34b7dbe08c1715b6f41cdbff70a816a3cba46d4483e2a365227ed751b9f0b676b3
+    cordis: ^4.0.0-rc.10
+  checksum: 10c0/cf4d8b22e097d230d8e13ec20167d9fea545a4e8dd1675e2489a2c61ad45e9d3a4a1623913bb594635a286f46ea3a20f59642f8b4d16a458d99d8578a2ff0e89
   languageName: node
   linkType: hard
 
@@ -50,25 +50,25 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cordisjs/plugin-timer@npm:^1.1.3":
-  version: 1.1.3
-  resolution: "@cordisjs/plugin-timer@npm:1.1.3"
+"@cordisjs/plugin-timer@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "@cordisjs/plugin-timer@npm:1.1.4"
   dependencies:
     cosmokit: "npm:^1.8.1"
   peerDependencies:
-    cordis: ^4.0.0-rc.9
-  checksum: 10c0/62775b9fccd3c574e69cd33e9e4274af282a4aa94b33fb46dfbc02f197e855d7b92f113a23419ef02e8a19732fffbd9b4caa5e0bdd959a15ed1ef5a75779d6f6
+    cordis: ^4.0.0-rc.11
+  checksum: 10c0/934539f6bc5bca71a4a421ed7a4cba6943691c3b6daa4b150a0bb0d14a2c5a8ac21c37669e49679ef068524ecb069d48d581c7fdba4276372c43f0b3901de2f8
   languageName: node
   linkType: hard
 
-"@cordisjs/sql-utils@npm:^6.1.1":
-  version: 6.1.1
-  resolution: "@cordisjs/sql-utils@npm:6.1.1"
+"@cordisjs/sql-utils@npm:^6.2.0":
+  version: 6.2.0
+  resolution: "@cordisjs/sql-utils@npm:6.2.0"
   dependencies:
     cosmokit: "npm:^1.8.1"
   peerDependencies:
-    "@cordisjs/plugin-database": ^4.1.1
-  checksum: 10c0/95274e31bad04a7d1a8562c389a48231d8344a4cb7ae54c5d4c70d6e85dde0318bd9b5a13ce0ed14d565bb714a63def13d15493c35683f3cef028c8dd786f845
+    "@cordisjs/plugin-database": ^4.2.0
+  checksum: 10c0/5f9a5adeebbc6615d23c138e6870ca28e4bc96689f9ffae71a7b980f20e18086536080dd29a924534a662efca297726a6697bc8ba62f0499967bcbf9ef279a5a
   languageName: node
   linkType: hard
 
@@ -279,6 +279,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@luckylillia-dev/plugin-sdk@workspace:packages/plugin-sdk":
+  version: 0.0.0-use.local
+  resolution: "@luckylillia-dev/plugin-sdk@workspace:packages/plugin-sdk"
+  dependencies:
+    "@types/node": "npm:^24.12.4"
+    esbuild: "npm:~0.28.0"
+    typescript: "npm:^7.0.2"
+  peerDependencies:
+    "@cordisjs/plugin-database": ^4.2.0
+    "@cordisjs/plugin-timer": ^1.1.4
+    "@satorijs/element": ^3.2.0
+    "@satorijs/protocol": ^1.7.0
+    cordis: 4.0.0-rc.11
+    schemastery: ^3.18.0
+  peerDependenciesMeta:
+    "@cordisjs/plugin-database":
+      optional: true
+  bin:
+    luckylillia-plugin: bin/luckylillia-plugin.mjs
+  languageName: unknown
+  linkType: soft
+
 "@nodable/entities@npm:^3.0.0":
   version: 3.0.0
   resolution: "@nodable/entities@npm:3.0.0"
@@ -455,6 +477,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/busboy@npm:^1.5.4":
+  version: 1.5.5
+  resolution: "@types/busboy@npm:1.5.5"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/d4a7f9a0e1f2a091542a9b8f0cca5bab07afc5fb80b49ce2b310593793ea3946003b944144ac9373c42ec432944112cdc87a7c49062389f2ca41084fe8a51d22
+  languageName: node
+  linkType: hard
+
 "@types/chai@npm:^5.2.2":
   version: 5.2.3
   resolution: "@types/chai@npm:5.2.3"
@@ -485,15 +516,6 @@ __metadata:
   version: 1.0.9
   resolution: "@types/estree@npm:1.0.9"
   checksum: 10c0/3ad3286ca2988cd550dafb8f2ad599c8474868e954fa601a36655bdfefd8039f7c714b8c1c7f2ae219ffbd58bd4660e66fa7479a0120fc02d4777057d4865387
-  languageName: node
-  linkType: hard
-
-"@types/fluent-ffmpeg@npm:^2.1.28":
-  version: 2.1.28
-  resolution: "@types/fluent-ffmpeg@npm:2.1.28"
-  dependencies:
-    "@types/node": "npm:*"
-  checksum: 10c0/5c02c2f7f8db001fe9c57ad521a47624258bd5fc427576a47c299044bb2ec8b73864d436548da39fd84fea4de28b6b0d8a644a4343993cea52328f6bf1b7e791
   languageName: node
   linkType: hard
 
@@ -541,15 +563,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/nodemailer@npm:^8.0.1":
-  version: 8.0.1
-  resolution: "@types/nodemailer@npm:8.0.1"
-  dependencies:
-    "@types/node": "npm:*"
-  checksum: 10c0/4370ac478a6811faaa64fcf769556515c72b78c66961cde22be75bb975ce8a964cfbe5e7c0988a99250f3250faa34357c73958b019b3c63dd138ea3784442032
-  languageName: node
-  linkType: hard
-
 "@types/qrcode@npm:^1.5.6":
   version: 1.5.6
   resolution: "@types/qrcode@npm:1.5.6"
@@ -559,12 +572,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/semver@npm:^7":
+  version: 7.8.0
+  resolution: "@types/semver@npm:7.8.0"
+  checksum: 10c0/46a1f38e36013448b279798e8b134e7e8de3b3630b1f40683903b9d57d36dd1d70838515570ed9a149fa09e9c381b9e39319b58d7b9f3b929b42ae2becff7aa3
+  languageName: node
+  linkType: hard
+
 "@types/ws@npm:^8.18.1":
   version: 8.18.1
   resolution: "@types/ws@npm:8.18.1"
   dependencies:
     "@types/node": "npm:*"
   checksum: 10c0/61aff1129143fcc4312f083bc9e9e168aa3026b7dd6e70796276dcfb2c8211c4292603f9c4864fae702f2ed86e4abd4d38aa421831c2fd7f856c931a481afbab
+  languageName: node
+  linkType: hard
+
+"@types/yauzl@npm:^3.4.0":
+  version: 3.4.0
+  resolution: "@types/yauzl@npm:3.4.0"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/9992cf7bf129466016baa4e99e05ad524afe2ff6e5d84e7408f2a7123bc4af3b4bfb639237308574b80e7e435571b6e1af6113910d166e8ea8b80da422ba8ecb
   languageName: node
   linkType: hard
 
@@ -827,13 +856,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"async@npm:^0.2.9":
-  version: 0.2.10
-  resolution: "async@npm:0.2.10"
-  checksum: 10c0/714d284dc6c3ae59f3e8b347083e32c7657ba4ffc4ff945eb152ad4fb08def27e768992fcd4d9fd3b411c6b42f1541862ac917446bf2a1acfa0f302d1001f7d2
-  languageName: node
-  linkType: hard
-
 "base-log-factory@npm:^3.0.0":
   version: 3.0.0
   resolution: "base-log-factory@npm:3.0.0"
@@ -865,6 +887,15 @@ __metadata:
     date-manip: "npm:^2.0.6"
     debug: "npm:^4.4.0"
   checksum: 10c0/bb3007817bd46e5b949555678334481307f340eb8fc38c4df7ef4ed8c03516b180b664e4cc651a64895bed7b3b152c0cd831c8f48022b7466f8b83e9d0eb142a
+  languageName: node
+  linkType: hard
+
+"busboy@npm:^1.6.0":
+  version: 1.6.0
+  resolution: "busboy@npm:1.6.0"
+  dependencies:
+    streamsearch: "npm:^1.1.0"
+  checksum: 10c0/fa7e836a2b82699b6e074393428b91ae579d4f9e21f5ac468e1b459a244341d722d2d22d10920cdd849743dbece6dca11d72de939fb75a7448825cf2babfba1f
   languageName: node
   linkType: hard
 
@@ -937,15 +968,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cordis@npm:4.0.0-rc.9":
-  version: 4.0.0-rc.9
-  resolution: "cordis@npm:4.0.0-rc.9"
+"cordis@npm:4.0.0-rc.11":
+  version: 4.0.0-rc.11
+  resolution: "cordis@npm:4.0.0-rc.11"
   dependencies:
     "@standard-schema/spec": "npm:^1.1.0"
     cosmokit: "npm:^1.8.1"
   peerDependencies:
-    "@cordisjs/plugin-include": ^1.0.5
-    "@cordisjs/plugin-loader": ^1.0.0-rc.6
+    "@cordisjs/plugin-include": ^1.1.1
+    "@cordisjs/plugin-loader": ^1.0.0-rc.8
   peerDependenciesMeta:
     "@cordisjs/plugin-include":
       optional: true
@@ -953,7 +984,7 @@ __metadata:
       optional: true
   bin:
     cordis: bin.js
-  checksum: 10c0/edec336088d95030e40aee755d58e00f0bf98ddc77e6baee61adebd29216e09b553c090964af636c7cf4fdc9612b291f14a0d01ba998c76da3aff40c9f014762
+  checksum: 10c0/3593e3dfe1a3561d8cf5db29ede0e7f9276417d99fa038da47cf5283c4ec8fca190df57e5436f01bab73b9d6edf28b3028fdf4116e47de88ab263b103afec772
   languageName: node
   linkType: hard
 
@@ -1208,16 +1239,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fluent-ffmpeg@npm:^2.1.3":
-  version: 2.1.3
-  resolution: "fluent-ffmpeg@npm:2.1.3"
-  dependencies:
-    async: "npm:^0.2.9"
-    which: "npm:^1.1.1"
-  checksum: 10c0/0397379ec3237c10b2389edeef26fdaf93f36d1b20b0f28f8945fe6d9121dcee9b0c615bf7d44edb7abd37233e0d24f0db39389668d3c86a1a2a0d59e3f4457b
-  languageName: node
-  linkType: hard
-
 "fs-extra@npm:^11.3.0, fs-extra@npm:^11.4.0":
   version: 11.4.0
   resolution: "fs-extra@npm:11.4.0"
@@ -1310,13 +1331,6 @@ __metadata:
   version: 1.1.4
   resolution: "is-what-type@npm:1.1.4"
   checksum: 10c0/2213ef99a7193d6edb3c1b2b1abfa01f5afece8d17bf0a18fe2b293d4ad3e335ea74880fb2e3b20cea12204dce3f563cc084bdeedcea045ae26922651a48bfaa
-  languageName: node
-  linkType: hard
-
-"isexe@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "isexe@npm:2.0.0"
-  checksum: 10c0/228cfa503fadc2c31596ab06ed6aa82c9976eec2bfd83397e7eaf06d0ccf42cd1dfd6743bf9aeb01aebd4156d009994c5f76ea898d2832c1fe342da923ca457d
   languageName: node
   linkType: hard
 
@@ -1482,42 +1496,44 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "lucky-lillia-bot@workspace:."
   dependencies:
-    "@cordisjs/plugin-database": "npm:^4.1.1"
-    "@cordisjs/plugin-database-sqlite": "npm:^5.1.1"
+    "@cordisjs/plugin-database": "npm:^4.2.0"
+    "@cordisjs/plugin-database-sqlite": "npm:^5.2.0"
     "@cordisjs/plugin-logger-console": "npm:^1.0.0"
-    "@cordisjs/plugin-timer": "npm:^1.1.3"
+    "@cordisjs/plugin-timer": "npm:^1.1.4"
     "@hono/node-server": "npm:^2.1.1"
     "@saltify/typeproto": "npm:^0.4.1"
     "@satorijs/element": "npm:^3.2.0"
     "@satorijs/protocol": "npm:^1.7.0"
-    "@types/fluent-ffmpeg": "npm:^2.1.28"
+    "@types/busboy": "npm:^1.5.4"
     "@types/node": "npm:^24.12.4"
-    "@types/nodemailer": "npm:^8.0.1"
     "@types/qrcode": "npm:^1.5.6"
+    "@types/semver": "npm:^7"
     "@types/ws": "npm:^8.18.1"
+    "@types/yauzl": "npm:^3.4.0"
+    busboy: "npm:^1.6.0"
     compare-versions: "npm:^6.1.1"
-    cordis: "npm:4.0.0-rc.9"
+    cordis: "npm:4.0.0-rc.11"
     cosmokit: "npm:^1.8.1"
     fast-xml-parser: "npm:^5.11.1"
     file-type: "npm:^22.0.2"
-    fluent-ffmpeg: "npm:^2.1.3"
     get-port: "npm:^7.2.0"
     hono: "npm:^4.13.5"
     image-size: "npm:^2.0.2"
     json5: "npm:^2.2.3"
     milkygen: "npm:^0.3.3"
-    nodemailer: "npm:^9.1.1"
     qrcode: "npm:^1.5.4"
     schemastery: "npm:^3.18.0"
+    semver: "npm:7.8.5"
     sift: "npm:^17.1.3"
-    silk-wasm: "npm:^3.7.1"
     ts-case-convert: "npm:^2.3.1"
     tsx: "npm:^4.23.13"
     typescript: "npm:^7.0.2"
+    undici: "npm:^7.18.2"
     vite: "npm:^8.2.2"
     vite-plugin-cp: "npm:^8.0.1"
     vitest: "npm:^4.1.11"
     ws: "npm:^8.21.3"
+    yauzl: "npm:^3.4.0"
     zod: "npm:^4.5.4"
   languageName: unknown
   linkType: soft
@@ -1592,13 +1608,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"nodemailer@npm:^9.1.1":
-  version: 9.1.1
-  resolution: "nodemailer@npm:9.1.1"
-  checksum: 10c0/b213a2a906697a735f6eb21103629b7a77aeac297b6d843efd4588157999bf6d19381853ac1224e472f5a34aec2e2412444151a2c6ec6e8c52150afa3055039c
-  languageName: node
-  linkType: hard
-
 "nopt@npm:^10.0.0":
   version: 10.0.1
   resolution: "nopt@npm:10.0.1"
@@ -1660,6 +1669,13 @@ __metadata:
   version: 2.0.3
   resolution: "pathe@npm:2.0.3"
   checksum: 10c0/c118dc5a8b5c4166011b2b70608762e260085180bb9e33e80a50dcdb1e78c010b1624f4280c492c92b05fc276715a4c357d1f9edc570f8f1b3d90b6839ebaca1
+  languageName: node
+  linkType: hard
+
+"pend@npm:~1.2.0":
+  version: 1.2.0
+  resolution: "pend@npm:1.2.0"
+  checksum: 10c0/8a87e63f7a4afcfb0f9f77b39bb92374afc723418b9cb716ee4257689224171002e07768eeade4ecd0e86f1fa3d8f022994219fb45634f2dbd78c6803e452458
   languageName: node
   linkType: hard
 
@@ -1797,7 +1813,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"semver@npm:^7.3.5":
+"semver@npm:7.8.5, semver@npm:^7.3.5":
   version: 7.8.5
   resolution: "semver@npm:7.8.5"
   bin:
@@ -1827,13 +1843,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"silk-wasm@npm:^3.7.1":
-  version: 3.7.1
-  resolution: "silk-wasm@npm:3.7.1"
-  checksum: 10c0/92087a7a2ef10068707f4dc3c8f0afdf5ccc08cb346735d31d9e0dbef9232d798cd2921651219db1257cc2da9b80222066cb46f6d0689d577a5de64521a33728
-  languageName: node
-  linkType: hard
-
 "source-map-js@npm:^1.2.1":
   version: 1.2.1
   resolution: "source-map-js@npm:1.2.1"
@@ -1852,6 +1861,13 @@ __metadata:
   version: 4.2.0
   resolution: "std-env@npm:4.2.0"
   checksum: 10c0/40ac525ce7b7c556abc332a7376f14356eeb1a7f17f6ff9a003eb9f52326ff1f3745d3e1b43452675b1ec6fcc319f1b1d6f3b0d386cf3f91058479ad883cff69
+  languageName: node
+  linkType: hard
+
+"streamsearch@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "streamsearch@npm:1.1.0"
+  checksum: 10c0/fbd9aecc2621364384d157f7e59426f4bfd385e8b424b5aaa79c83a6f5a1c8fd2e4e3289e95de1eb3511cb96bb333d6281a9919fafce760e4edb35b2cd2facab
   languageName: node
   linkType: hard
 
@@ -2140,6 +2156,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"undici@npm:^7.18.2":
+  version: 7.30.1
+  resolution: "undici@npm:7.30.1"
+  checksum: 10c0/c838089b010e8e28a9a5358d4bf4621e0c8d7bb70058b23e819667349c4c0b6791a7c8bc9bbe94ff0923db132faae0d9d9592b9743eda4f2b49466fa57482213
+  languageName: node
+  linkType: hard
+
 "undici@npm:^8.4.1":
   version: 8.10.1
   resolution: "undici@npm:8.10.1"
@@ -2312,17 +2335,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"which@npm:^1.1.1":
-  version: 1.3.1
-  resolution: "which@npm:1.3.1"
-  dependencies:
-    isexe: "npm:^2.0.0"
-  bin:
-    which: ./bin/which
-  checksum: 10c0/e945a8b6bbf6821aaaef7f6e0c309d4b615ef35699576d5489b4261da9539f70393c6b2ce700ee4321c18f914ebe5644bc4631b15466ffbaad37d83151f6af59
-  languageName: node
-  linkType: hard
-
 "which@npm:^7.0.0":
   version: 7.0.0
   resolution: "which@npm:7.0.0"
@@ -2419,6 +2431,15 @@ __metadata:
     y18n: "npm:^4.0.0"
     yargs-parser: "npm:^18.1.2"
   checksum: 10c0/f1ca680c974333a5822732825cca7e95306c5a1e7750eb7b973ce6dc4f97a6b0a8837203c8b194f461969bfe1fb1176d1d423036635285f6010b392fa498ab2d
+  languageName: node
+  linkType: hard
+
+"yauzl@npm:^3.4.0":
+  version: 3.4.0
+  resolution: "yauzl@npm:3.4.0"
+  dependencies:
+    pend: "npm:~1.2.0"
+  checksum: 10c0/17a98c42c0065e8af429eb8a61f7a0e4562181ed54080366b838f34f741b6829f167f804787c86b7646bb042707f35871739f053de0548285e405a2eae4da025
   languageName: node
   linkType: hard
 

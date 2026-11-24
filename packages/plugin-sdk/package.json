@@ -1,0 +1,63 @@
+{
+  "name": "@luckylillia-dev/plugin-sdk",
+  "version": "1.0.1",
+  "description": "SDK for writing LuckyLillia Bot plugins",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./webui": {
+      "types": "./lib/webui.d.ts",
+      "default": "./lib/webui.js"
+    },
+    "./testing": {
+      "types": "./lib/testing.d.ts",
+      "default": "./lib/testing.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "luckylillia-plugin": "bin/luckylillia-plugin.mjs"
+  },
+  "files": [
+    "lib",
+    "bin",
+    "template"
+  ],
+  "scripts": {
+    "build": "tsc -p . && node scripts/build-testing.mjs",
+    "prepack": "tsc -p . && node scripts/build-testing.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LuckyLilliaDev/LuckyLilliaBot.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "author": "linyuchen",
+  "license": "GPL-2.0",
+  "peerDependencies": {
+    "@cordisjs/plugin-database": "^4.2.0",
+    "@cordisjs/plugin-timer": "^1.1.4",
+    "@satorijs/element": "^3.2.0",
+    "@satorijs/protocol": "^1.7.0",
+    "cordis": "4.0.0-rc.11",
+    "schemastery": "^3.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@cordisjs/plugin-database": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "esbuild": "~0.28.0",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

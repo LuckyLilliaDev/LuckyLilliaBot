@@ -12,27 +12,24 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "paths": {
-      "@/common/*": [
-        "./src/common/*"
+      "@/*": [
+        "./src/*"
       ],
-      "@/onebot11/*": [
-        "./src/onebot11/*"
-      ],
-      "@/ntqqapi/*": [
-        "./src/ntqqapi/*"
-      ],
-      "@/milky/*": [
-        "./src/milky/*"
+      "@luckylillia-dev/plugin-sdk": [
+        "./packages/plugin-sdk/src/index.ts"
       ]
     },
     "noEmit": true
   },
   "include": [
     "src",
+    "test/fixtures/plugins",
     "scripts",
     "test/*.ts"
   ],
   "exclude": [
-    "src/webui/FE"
+    "src/plugin/internal/service/webui/FE",
+    "src/**/client",
+    "test/fixtures/plugins/*/lib"
   ]
 }

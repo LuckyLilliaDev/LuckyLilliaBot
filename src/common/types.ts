@@ -1,6 +1,6 @@
 export interface BaseConnectConfig {
   type: string
-  name?: string // 自定义名称
+  name?: string
   enable: boolean
   token: string
   reportSelfMessage: boolean
@@ -79,6 +79,56 @@ export interface SatoriConfig {
   token: string
 }
 
+export type QQOfficialIntent =
+  | 'GROUP_AND_C2C_EVENT' | 'GROUP_MEMBER_EVENT' | 'INTERACTION' | 'MESSAGE_AUDIT'
+  | 'GUILDS' | 'GUILD_MEMBERS' | 'GUILD_MESSAGES' | 'GUILD_MESSAGE_REACTIONS' | 'DIRECT_MESSAGE' | 'PUBLIC_GUILD_MESSAGES'
+  | 'FORUMS_EVENT' | 'OPEN_FORUMS_EVENT' | 'AUDIO_ACTION' | 'AUDIO_OR_LIVE_CHANNEL_MEMBER'
+
+/** An item of the C2C custom menu */
+export type QQOfficialMenuItem =
+  | { type: 'send_message' | 'link'; name: string; value: string }
+  | { type: 'switch'; name: string; value: string; switchDefault: boolean }
+  | { type: 'menu'; name: string; subMenuItems: { type: 'send_message' | 'link'; name: string; value: string }[] }
+
+/** An item of the group command panel */
+export type QQOfficialPanelItem =
+  | { type: 'command'; name: string; description: string; onlyAdmin: boolean }
+  | { type: 'link'; name: string; description: string; value: string; onlyAdmin: boolean }
+
+export interface QQOfficialConfig {
+  appId: string
+  secret: string
+  sandbox: boolean
+  /** Private bots receive every guild message, public ones only those that @ them */
+  type: 'public' | 'private'
+  intents: QQOfficialIntent[]
+  useMarkdownIfAt: boolean
+  autoStreamText: ('private' | 'group' | 'guild')[]
+  retryWhen: number[]
+  manualAcknowledge: boolean
+  privateSlash: boolean
+  privateMenu: QQOfficialMenuItem[]
+  groupSlash: boolean
+  groupPanels: QQOfficialPanelItem[]
+  endpoint: string
+  gatewayUrl: string
+  userInfoApi: string
+  disableUserNamePersist: boolean
+  debug: boolean
+}
+
+/** builtin:nt-protocol: how the scanned account logs in */
+export interface NTProtocolConfig {
+  /** The pure protocol, or NativeQQ bridging an official QQ client */
+  mode: 'direct' | 'nativeqq'
+  /** The QQ client the pure protocol passes for; NativeQQ ignores it */
+  protocol: 'linux' | 'macos' | 'windows' | 'watch'
+  /** The QQ the bridge starts, empty: the one NativeQQ finds. A NativeQQ configuration file is only given at launch */
+  nativeQQ: { qqPath: string }
+  /** The account to log in when this instance starts; empty disables automatic login. */
+  autoLoginUin: string
+}
+
 export interface MilkyHttpConfig {
   host: string
   port: number
@@ -119,20 +169,17 @@ export interface EmailConfig {
   to: string
 }
 
+/** The bot's own settings, an instance's settings.json. The adapters keep theirs in their plugin entries. */
 export interface Config {
-  milky: MilkyConfig
-  satori: SatoriConfig
-  ob11: OB11Config
   webui: WebUIConfig
   email?: EmailConfig
   // onlyLocalhost: boolean
-  enableLocalFile2Url?: boolean // 开启后，本地文件路径图片会转成http链接, 语音会转成base64
   log?: boolean
-  logLevel?: 'info' | 'debug' // 'debug' 打开底层详情日志 (等价 --debug); 默认 'info'
-  autoDeleteFile?: boolean
-  autoDeleteFileSecond?: number
-  ffmpeg?: string // ffmpeg路径
-  musicSignUrl?: string
+  logLevel?: 'error' | 'warn' | 'info' | 'debug' // 最低输出级别，--debug 优先
+  /** @deprecated Retained for old settings; conversion uses the optional FFmpeg plugin. */
+  ffmpeg?: string
+  /** Makes OneBot music cards: song parameters in, a signed card out, as ss.xingzhige.com does. */
+  musicCardSignUrl?: string
   msgCacheExpire?: number // second
   // /** @deprecated */
   // heartInterval?: number // ms
@@ -140,6 +187,19 @@ export interface Config {
   // receiveOfflineMsg?: boolean // 是否接收离线消息
   // /** @deprecated */
   // debug?: boolean
+}
+
+/** The adapters' sections, in the shape the bot's config file had before they moved to their plugin entries. */
+export interface AdapterSections {
+  ob11: OB11Config
+  satori: SatoriConfig
+  milky: MilkyConfig
+}
+
+/** What OneBot get_config / set_config and POST /api/config still speak: the settings plus the adapters. */
+export type LegacyConfig = Config & AdapterSections & {
+  /** The old name of musicCardSignUrl, still read and written for the clients that know only that one. */
+  musicSignUrl?: string
 }
 
 export interface CheckVersion {
