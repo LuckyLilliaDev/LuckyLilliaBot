@@ -51,8 +51,6 @@ const external = [...new Set([
   'ws',
   // Carries its HTTP parser as embedded WASM: copied as it is rather than bundled
   'undici',
-  ...getModuleDependencies('reggol'),
-  ...getModuleDependencies('file-type'),
   ...pluginShared.flatMap(name => getModuleDependencies(name)),
 ])]
 
@@ -87,7 +85,6 @@ export default defineConfig({
             ...external.map(genCpModule),
             { src: './packages/plugin-sdk/lib', dest: 'dist/node_modules/@luckylillia-dev/plugin-sdk/lib', flatten: false },
             { src: './packages/plugin-sdk/package.json', dest: 'dist/node_modules/@luckylillia-dev/plugin-sdk/' },
-            { src: './output/builtin-packages', dest: 'dist/builtin-plugins', flatten: false },
             { src: './output/builtin-packages/@luckylillia-dev/plugin-webui/lib/webui', dest: 'dist/webui', flatten: false },
             { src: './src/main/config/default_config.json', dest: 'dist/' },
             { src: './package-dist.json', dest: 'dist/', rename: 'package.json' },

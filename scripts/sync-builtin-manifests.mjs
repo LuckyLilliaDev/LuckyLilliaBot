@@ -33,7 +33,7 @@ for (const category of await readdir(internal, { withFileTypes: true })) {
     }
     const text = JSON.stringify(manifest, null, 2) + '\n'
     if (process.argv.includes('--check')) {
-      if (!existsSync(file) || await readFile(file, 'utf8') !== text) throw new Error('Run node scripts/sync-builtin-manifests.mjs: ' + file)
+      if (!existsSync(file) || (await readFile(file, 'utf8')).replace(/\r\n/g, '\n') !== text) throw new Error('Run node scripts/sync-builtin-manifests.mjs: ' + file)
     } else await writeFile(file, text)
   }
 }

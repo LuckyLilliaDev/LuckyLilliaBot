@@ -3,9 +3,7 @@
     "composite": true,
     "paths": {
       "@common/types": ["../../../../../common/types"],
-      "@ntqqapi/types": ["../../../../../ntqq/contracts/ntqqapi/types"],
       "@/common/types": ["../../../../../common/types"],
-      "@/ntqqapi/types": ["../../../../../ntqq/contracts/ntqqapi/types"],
       "@shared/*": ["../../../../../common/*"],
       "@luckylillia-dev/plugin-sdk/webui": ["../../../../../../packages/plugin-sdk/src/webui.ts"],
       "@/*": ["./*"],
@@ -27,7 +25,6 @@
     "./**/*",
     "../../../../../common/types.ts",
     "../../../../../common/schema/**/*",
-    "../../../../../ntqq/contracts/ntqqapi/types/**/*",
     "../../../protocol/qq-official/setupTypes.ts",
     "../../../protocol/qq-official/statsTypes.ts",
     "../../../tool/market/images.ts",
