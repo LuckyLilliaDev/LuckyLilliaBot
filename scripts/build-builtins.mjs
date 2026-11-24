@@ -77,7 +77,6 @@ for (const dir of entries) {
       platform: 'browser', format: 'esm', target: 'es2022', jsx: 'automatic', minify: true,
       loader: { '.png': 'dataurl', '.jpg': 'dataurl', '.jpeg': 'dataurl', '.webp': 'dataurl', '.svg': 'dataurl' },
       nodePaths: [path.join(fe, 'node_modules')],
-      alias: { '@ntqqapi/types': path.join(root, 'src/ntqq/types.ts') },
       external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@luckylillia-dev/plugin-sdk/webui'],
       define: { 'process.env.NODE_ENV': '"production"' },
     })

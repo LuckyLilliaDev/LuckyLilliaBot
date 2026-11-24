@@ -58,7 +58,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, '../../../../../common'),
-      '@ntqqapi/types': path.resolve(__dirname, '../../../../../ntqq/types.ts'),
       // Builtin plugins' WebUI (`client/` next to their code, see plugin-host/builtins.ts) is bundled, so its SDK
       // imports go straight to the runtime instead of through the import map
       '@luckylillia-dev/plugin-sdk/webui': path.resolve(__dirname, 'plugin-host/sdk.tsx'),
@@ -84,6 +83,10 @@ export default defineConfig({
         changeOrigin: false,
       },
       '/plugin-assets': {
+        target: backend,
+        changeOrigin: false,
+      },
+      '/face': {
         target: backend,
         changeOrigin: false,
       },
