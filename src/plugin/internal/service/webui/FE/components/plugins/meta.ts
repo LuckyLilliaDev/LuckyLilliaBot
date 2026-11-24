@@ -1,13 +1,14 @@
 import {
   Bell, Book, BookOpen, Bot, Brain, Calendar, Clock, Cloud, Code, Cpu, Database, Dice5, FileText, Gamepad2, Gift,
   Globe, Hand, Heart, Image, Info, Languages, LayoutDashboard, LucideIcon, Mail, MessageSquare, MessagesSquare, Milk, Music, Network,
-  Puzzle, Radio, Repeat, ScrollText, Search, Send, Settings, ShieldBan, Sliders, Smartphone, Smile, Sparkles, Star, Store,
+  Puzzle, Radio, Repeat, ScrollText, Search, Send, Server, Settings, ShieldBan, Sliders, Smartphone, Smile, Sparkles, Star, Store,
   Terminal, Timer, Trophy, Users, Wrench, Zap,
 } from 'lucide-react'
 import { EntryScope, PluginState, PluginStatus } from '../../types/plugins'
 
 // A fixed set instead of lucide's DynamicIcon, which would emit one chunk per icon (~1600 files) into the build
 const ICONS: Record<string, LucideIcon> = {
+  server: Server,
   bell: Bell, book: Book, 'book-open': BookOpen, bot: Bot, brain: Brain, calendar: Calendar, clock: Clock,
   cloud: Cloud, code: Code, cpu: Cpu, database: Database, 'dice-5': Dice5, 'file-text': FileText,
   'gamepad-2': Gamepad2, gift: Gift, globe: Globe, hand: Hand, heart: Heart, image: Image, info: Info,

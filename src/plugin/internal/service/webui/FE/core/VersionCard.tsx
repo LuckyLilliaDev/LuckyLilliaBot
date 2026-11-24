@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ArrowUpCircle, CheckCircle2, FileText, Info, Loader2, RefreshCw } from 'lucide-react'
 import { version as builtVersion } from '../../../../../../version'
-import { ABOUT_CHECK_STALE, useCoreUpdateStore, type CoreUpdateStatus } from '../stores/coreUpdateStore'
-
-const STATE_TEXT: Record<CoreUpdateStatus['state'], string> = {
-  idle: '', checking: '正在检查…', downloading: '正在下载新版本…', installing: '正在安装新版本…', restarting: '正在重启…',
-}
+import { ABOUT_CHECK_STALE, coreUpdateProgressMessage, useCoreUpdateStore } from '../stores/coreUpdateStore'
 
 const VersionCard: React.FC = () => {
   const status = useCoreUpdateStore(state => state.status)
@@ -85,7 +81,7 @@ const VersionCard: React.FC = () => {
       {(busy || target) && (
         <div className="flex items-center gap-2 text-sm text-theme-secondary">
           <Loader2 size={16} className="animate-spin" />
-          {target ? (waitedTooLong ? 'Bot 重启的时间比预期长，可以稍后手动刷新页面' : `正在重启到 ${target}，完成后页面会自动刷新…`) : STATE_TEXT[status!.state]}
+          {coreUpdateProgressMessage(status, target, waitedTooLong) ?? '正在检查…'}
         </div>
       )}
       {!busy && !target && upToDate && (

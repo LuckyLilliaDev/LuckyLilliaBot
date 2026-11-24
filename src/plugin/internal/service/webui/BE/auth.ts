@@ -5,6 +5,7 @@ import { LOG_DIR } from '@/common/globalVars'
 import { hashPassword } from './passwordHash'
 import { Context, Next } from 'hono'
 import { webuiTokenUtil } from '../../../../../main/config'
+import { behindGateway, gatewayAuthenticated } from './gateway'
 
 interface GlobalLoginAttempt {
   consecutiveFailures: number
@@ -109,6 +110,12 @@ export function checkToken(presented: string | undefined, ip: string, method: st
 }
 
 export async function authMiddleware(c: Context, next: Next) {
+  // Behind the manager's gateway the one login of all instances was checked there, before the request got here
+  if (behindGateway()) {
+    if (gatewayAuthenticated(name => c.req.header(name))) return await next()
+    c.header('X-Webui-Auth', 'required')
+    return c.json({ success: false, message: '请输入密码' }, 403)
+  }
   // Setting the first password is the one thing done without one
   if (c.req.path === '/api/set-token' && !webuiTokenUtil.getToken()) return await next()
   const presented = c.req.header('X-Webui-Token') || c.req.query('token')

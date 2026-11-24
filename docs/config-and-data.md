@@ -114,12 +114,14 @@ export function apply(ctx: Context) {
 
 | 层次 | 隔离内容 |
 |---|---|
-| Bot 实例，启动时 `--instance <名字>` | settings/plugins/数据库/插件数据/WebUI 密码，由一个进程使用 |
+| Bot 实例（`data/instances/<实例名>/`） | `settings.json`、`plugins.json`、`database.db`、`plugin-data/`，每个实例由独立子进程运行 |
 | 同一 Bot 实例内的插件条目 | 启停、配置、生效范围、排序和运行状态 |
+
+默认通过管理器（`llbot-manager.js`）在同一进程树内统一拉起和管理所有实例：所有实例共用同一个 WebUI 网关端口（配置存于 `data/manager.json`，可用 `--webui-port` 或 `LLBOT_WEBUI_PORT` 覆盖）和同一套登录密码（`data/webui_token.txt`）。访问根路径 `/` 会自动进入当前实例（挂载在 `/i/<实例名>/`），通过侧边栏内置的「实例管理」页统一切换、新建、启停、查看终端日志和配置自启。启动参数 `--instance <名字>` 指定本次启动时附带拉起并接收单实例参数（如 `-q`、`--protocol`）的目标实例；使用 `--no-manager` 或 `--no-supervisor` 时退回单进程单实例模式。
 
 第三方插件包可添加多个条目，分别处理不同 Bot 或群。条目不等于独立代码副本，也不自动获得单独文件目录；同名服务、同端口、同文件仍可能冲突。
 
-不同 Bot 实例的端口要避免冲突，配置不随换号切换。前端包级 hook 默认使用第一个条目，详见[页面与入口](webui.md#页面与入口)。每个 Bot 实例的数据都在 `data/instances/<实例名>/` 下。
+不同 Bot 实例各自开放的协议端口（OneBot 11 / Milky / Satori 等）仍需避免冲突，配置不随换号切换。前端包级 hook 默认使用第一个条目，详见[页面与入口](webui.md#页面与入口)。每个 Bot 实例的数据都在 `data/instances/<实例名>/` 下。
 
 ## HTTP 与代理
 

@@ -5,7 +5,23 @@ import net, { type AddressInfo } from 'node:net'
 import { hostname, tmpdir } from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { isManaged, isManagerMessage, type InstanceMessage } from '@/main/manager/protocol'
 import { cleanupRemovedPackages, scannedPackagePath } from './package-location'
+
+export interface SharedPackagesIpc {
+  register(id: string, roots: string[]): void
+  unregister(id: string): void
+  broadcast(
+    senderId: string,
+    root: string,
+    action: 'prepare' | 'finish',
+    change: SharedPackageChange,
+    applied?: boolean,
+  ): Promise<SharedPackageResult[]>
+  onRpc(
+    handler: (action: 'prepare' | 'finish', change: SharedPackageChange, applied?: boolean) => Promise<unknown>,
+  ): () => void
+}
 
 export interface SharedPackageChange {
   id: string
@@ -35,6 +51,97 @@ interface Call { secret: string; action: 'ping' | 'prepare' | 'finish'; change?:
 const STATE = '.llbot-packages'
 const WAIT = 120_000
 const RPC_TIMEOUT = 30_000
+
+/** Node IPC transport used when this instance runs under llbot-manager.js */
+export function createProcessIpc(): SharedPackagesIpc | undefined {
+  if (!isManaged() || typeof process.send !== 'function') return undefined
+  type RpcHandler = (action: 'prepare' | 'finish', change: SharedPackageChange, applied?: boolean) => Promise<unknown>
+  let rpcHandler: RpcHandler | undefined
+  const pending = new Map<string, { resolve(value: SharedPackageResult[]): void; reject(error: Error): void; timer: NodeJS.Timeout }>()
+
+  const send = (message: InstanceMessage): boolean => {
+    if (!process.connected || typeof process.send !== 'function') return false
+    process.send(message)
+    return true
+  }
+
+  const onMessage = (message: unknown) => {
+    if (!isManagerMessage(message)) return
+    if (message.type === 'pkg:broadcast-result') {
+      const waiter = pending.get(message.reqId)
+      if (!waiter) return
+      pending.delete(message.reqId)
+      clearTimeout(waiter.timer)
+      if (message.error !== undefined) waiter.reject(new Error(message.error))
+      else waiter.resolve((message.results ?? []) as SharedPackageResult[])
+      return
+    }
+    if (message.type === 'pkg:rpc') {
+      const handler = rpcHandler
+      if (!handler) {
+        send({ type: 'pkg:rpc-result', reqId: message.reqId, error: '实例尚未就绪或已停止' })
+        return
+      }
+      void handler(message.action, message.change as unknown as SharedPackageChange, message.applied).then(
+        value => send({ type: 'pkg:rpc-result', reqId: message.reqId, value }),
+        error => send({ type: 'pkg:rpc-result', reqId: message.reqId, error: error instanceof Error ? error.message : String(error) }),
+      )
+    }
+  }
+
+  const onDisconnect = () => {
+    for (const [reqId, waiter] of pending) {
+      pending.delete(reqId)
+      clearTimeout(waiter.timer)
+      waiter.reject(new Error('与实例管理器的 IPC 连接已断开'))
+    }
+  }
+
+  process.on('message', onMessage)
+  process.on('disconnect', onDisconnect)
+
+  return {
+    register(id, roots) {
+      send({ type: 'pkg:register', id, roots })
+    },
+    unregister(id) {
+      send({ type: 'pkg:unregister', id })
+      onDisconnect()
+      process.off('message', onMessage)
+      process.off('disconnect', onDisconnect)
+    },
+    broadcast(senderId, root, action, change, applied) {
+      const reqId = randomUUID()
+      return new Promise<SharedPackageResult[]>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(reqId)
+          reject(new Error('实例管理器未响应插件协调请求'))
+        }, RPC_TIMEOUT + 5000)
+        timer.unref?.()
+        pending.set(reqId, { resolve, reject, timer })
+        if (!send({
+          type: 'pkg:broadcast',
+          reqId,
+          senderId,
+          root,
+          action,
+          change: change as unknown as Record<string, unknown>,
+          applied,
+        })) {
+          pending.delete(reqId)
+          clearTimeout(timer)
+          reject(new Error('与实例管理器的 IPC 连接已断开'))
+        }
+      })
+    },
+    onRpc(handler) {
+      rpcHandler = handler
+      return () => {
+        if (rpcHandler === handler) rpcHandler = undefined
+      }
+    },
+  }
+}
 
 function semaphore(root: string): string | number {
   const digest = createHash('sha256').update(root).digest()
@@ -150,8 +257,11 @@ export class SharedPackages {
   readonly id = randomUUID()
   private readonly secret = randomUUID()
   private roots: string[] = []
+  private environment = ''
   private server?: net.Server
   private peer?: Peer
+  private readonly ipc?: SharedPackagesIpc
+  private disposeRpc?: () => void
   private timer?: NodeJS.Timeout
   private closing = false
   private readonly finished = new Map<string, SharedPackageResult>()
@@ -165,48 +275,71 @@ export class SharedPackages {
     prepare(change: SharedPackageChange): Promise<void>
     finish(change: SharedPackageChange, applied: boolean): Promise<Omit<SharedPackageResult, 'instance' | 'pid'>>
     warn(error: unknown): void
-  }) {}
+    /** Optional manager IPC transport; auto-detected when LLBOT_MANAGED=1. Pass null to force peer-file TCP mode. */
+    ipc?: SharedPackagesIpc | null
+  }) {
+    this.ipc = options.ipc === null ? undefined : (options.ipc ?? createProcessIpc())
+  }
 
   async initialize(task: () => Promise<void>): Promise<void> {
     this.roots = [...new Set(await Promise.all(this.options.roots.map(packageRoot)))].sort()
-    this.server = net.createServer(socket => {
-      socket.setEncoding('utf8')
-      let buffer = ''
-      socket.setTimeout(RPC_TIMEOUT, () => socket.destroy())
-      socket.on('error', () => {})
-      socket.on('data', chunk => {
-        buffer += chunk.toString()
-        if (buffer.length > 1024 * 1024) return socket.destroy()
-        if (!buffer.includes('\n')) return
-        socket.removeAllListeners('data')
-        let call: Call
-        try { call = JSON.parse(buffer.slice(0, buffer.indexOf('\n'))) } catch { return socket.destroy() }
-        if (call.secret !== this.secret) return socket.destroy()
-        void this.receive(call).then(value => socket.end(JSON.stringify({ value }) + '\n'), error =>
-          socket.end(JSON.stringify({ error: String(error instanceof Error ? error.message : error) }) + '\n'))
+    this.environment = await environmentIdentity()
+    if (this.ipc) {
+      this.disposeRpc = this.ipc.onRpc((action, change, applied) =>
+        this.receive({ secret: this.secret, action, change, applied }))
+    } else {
+      this.server = net.createServer(socket => {
+        socket.setEncoding('utf8')
+        let buffer = ''
+        socket.setTimeout(RPC_TIMEOUT, () => socket.destroy())
+        socket.on('error', () => {})
+        socket.on('data', chunk => {
+          buffer += chunk.toString()
+          if (buffer.length > 1024 * 1024) return socket.destroy()
+          if (!buffer.includes('\n')) return
+          socket.removeAllListeners('data')
+          let call: Call
+          try { call = JSON.parse(buffer.slice(0, buffer.indexOf('\n'))) } catch { return socket.destroy() }
+          if (call.secret !== this.secret) return socket.destroy()
+          void this.receive(call).then(value => socket.end(JSON.stringify({ value }) + '\n'), error =>
+            socket.end(JSON.stringify({ error: String(error instanceof Error ? error.message : error) }) + '\n'))
+        })
       })
-    })
-    await new Promise<void>((resolve, reject) => {
-      this.server!.once('error', reject)
-      this.server!.listen({ host: '127.0.0.1', port: 0 }, resolve)
-    })
-    this.server.unref()
-    this.peer = { id: this.id, secret: this.secret, instance: this.options.instance, pid: process.pid, host: hostname(), environment: await environmentIdentity(),
-      port: (this.server.address() as AddressInfo).port }
+      await new Promise<void>((resolve, reject) => {
+        this.server!.once('error', reject)
+        this.server!.listen({ host: '127.0.0.1', port: 0 }, resolve)
+      })
+      this.server.unref()
+      this.peer = { id: this.id, secret: this.secret, instance: this.options.instance, pid: process.pid, host: hostname(), environment: this.environment,
+        port: (this.server.address() as AddressInfo).port }
+    }
     // Deduplicate the rare Unix semaphore collision and use one total lock ordering across services.
     const lockRoots = [...new Map(this.roots.map(root => [semaphore(root), root])).entries()].sort(([a], [b]) => String(a).localeCompare(String(b))).map(([, root]) => root)
     const enter = async (index: number): Promise<void> => {
       if (index < lockRoots.length) return withPackageRootLock(lockRoots[index], () => enter(index + 1))
       for (const root of this.roots) {
-        const local = localPeerDirectory(root)
-        await mkdir(local, { recursive: true, mode: 0o700 })
-        await save(path.join(local, `${this.id}.json`), this.peer)
-        try {
-          await save(path.join(root, STATE, 'peers', `${this.id}.json`), this.peer)
-        } catch (error) {
-          if (!['EROFS', 'EACCES', 'EPERM', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
-          this.readonlyRoots.add(root)
-          this.options.warn(`插件目录进入只读模式，可加载但不能安装、更新或卸载：${root}`)
+        if (this.ipc) {
+          const probe = path.join(root, STATE, `.probe-${this.id}`)
+          try {
+            await mkdir(path.join(root, STATE), { recursive: true })
+            await writeFile(probe, '')
+            await rm(probe, { force: true }).catch(() => {})
+          } catch (error) {
+            if (!['EROFS', 'EACCES', 'EPERM', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+            this.readonlyRoots.add(root)
+            this.options.warn(`插件目录进入只读模式，可加载但不能安装、更新或卸载：${root}`)
+          }
+        } else {
+          const local = localPeerDirectory(root)
+          await mkdir(local, { recursive: true, mode: 0o700 })
+          await save(path.join(local, `${this.id}.json`), this.peer)
+          try {
+            await save(path.join(root, STATE, 'peers', `${this.id}.json`), this.peer)
+          } catch (error) {
+            if (!['EROFS', 'EACCES', 'EPERM', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+            this.readonlyRoots.add(root)
+            this.options.warn(`插件目录进入只读模式，可加载但不能安装、更新或卸载：${root}`)
+          }
         }
         if (this.readonlyRoots.has(root)) {
           if (existsSync(path.join(root, STATE, 'pending.json')) || existsSync(path.join(root, STATE, 'swap.json'))) {
@@ -214,6 +347,7 @@ export class SharedPackages {
           }
         } else await this.recover(root)
       }
+      this.ipc?.register(this.id, this.roots)
       await task()
     }
     try { await enter(0) } catch (error) { await this.close(); throw error }
@@ -233,12 +367,18 @@ export class SharedPackages {
     this.closing = true
     if (this.timer) clearInterval(this.timer)
     await Promise.allSettled([...this.operations, ...this.requests.values()])
-    // Unregister before closing the listener so another peer never observes ECONNREFUSED on a closing file.
-    for (const root of this.roots) {
-      await rm(path.join(root, STATE, 'peers', `${this.id}.json`), { force: true }).catch(() => {})
-      await rm(path.join(localPeerDirectory(root), `${this.id}.json`), { force: true }).catch(() => {})
+    if (this.ipc) {
+      this.ipc.unregister(this.id)
+      this.disposeRpc?.()
+      this.disposeRpc = undefined
+    } else {
+      // Unregister before closing the listener so another peer never observes ECONNREFUSED on a closing file.
+      for (const root of this.roots) {
+        await rm(path.join(root, STATE, 'peers', `${this.id}.json`), { force: true }).catch(() => {})
+        await rm(path.join(localPeerDirectory(root), `${this.id}.json`), { force: true }).catch(() => {})
+      }
+      this.server?.close()
     }
-    this.server?.close()
   }
 
   writable(root: string): boolean {
@@ -271,7 +411,14 @@ export class SharedPackages {
     let value: T
     try {
       // A refusal, timeout, or lost live participant prevents the filesystem mutation.
-      const prepared = await Promise.allSettled(peers.map(peer => request(peer, { action: 'prepare', change })))
+      const tasks: Promise<unknown>[] = peers.map(peer => request(peer, { action: 'prepare', change }))
+      if (this.ipc) {
+        tasks.unshift(
+          this.receive({ secret: this.secret, action: 'prepare', change }),
+          this.ipc.broadcast(this.id, root, 'prepare', change),
+        )
+      }
+      const prepared = await Promise.allSettled(tasks)
       const failed = prepared.find((result): result is PromiseRejectedResult => result.status === 'rejected')
       if (failed) throw failed.reason
       value = await apply()
@@ -343,7 +490,7 @@ export class SharedPackages {
       const peer = await json<Peer>(file).catch(() => undefined)
       if (!peer || peer.id === this.id || seen.has(peer.id)) continue
       seen.add(peer.id)
-      if (peer.host !== hostname() || peer.environment !== this.peer?.environment) continue
+      if (peer.host !== hostname() || peer.environment !== this.environment) continue
       if (!isProcessAlive(peer.pid)) await this.removePeerFiles(root, peer.id, file)
     }
   }
@@ -356,7 +503,7 @@ export class SharedPackages {
       if (!peer) continue
       if (seen.has(peer.id)) continue
       seen.add(peer.id)
-      if (peer.host !== hostname() || peer.environment !== this.peer?.environment) {
+      if (peer.host !== hostname() || peer.environment !== this.environment) {
         // A different container/host has a different kernel semaphore. Its absence cannot be proven here.
         throw new Error('插件目录仍登记了其他主机的实例；请停止原环境并清理其登记后重试，跨容器请使用独立插件目录')
       }
@@ -379,11 +526,40 @@ export class SharedPackages {
   }
 
   private async finish(pending: Pending): Promise<SharedPackageResult[]> {
-    const instances = await Promise.all(pending.peers.map(async peer => {
+    const unmanaged = await Promise.all(pending.peers.map(async peer => {
       try { return await request<SharedPackageResult>(peer, { action: 'finish', change: pending.change, applied: pending.applied }) } catch (error) {
         return { instance: peer.instance, pid: peer.pid, status: 'failed' as const, reason: String(error instanceof Error ? error.message : error) }
       }
     }))
+    let instances: SharedPackageResult[] = unmanaged
+    if (this.ipc) {
+      const [selfResult, managedResults] = await Promise.all([
+        (async (): Promise<SharedPackageResult> => {
+          try {
+            return await this.receive({
+              secret: this.secret,
+              action: 'finish',
+              change: pending.change,
+              applied: pending.applied,
+            }) as SharedPackageResult
+          } catch (error) {
+            return {
+              instance: this.options.instance,
+              pid: process.pid,
+              status: 'failed',
+              reason: String(error instanceof Error ? error.message : error),
+            }
+          }
+        })(),
+        this.ipc.broadcast(this.id, pending.change.root, 'finish', pending.change, pending.applied).catch((error): SharedPackageResult[] => [{
+          instance: 'manager',
+          pid: 0,
+          status: 'failed',
+          reason: String(error instanceof Error ? error.message : error),
+        }]),
+      ])
+      instances = [selfResult, ...managedResults, ...unmanaged]
+    }
     await save(path.join(pending.change.root, STATE, 'last.json'), { ...pending, instances, at: Date.now() })
     // Keep failed RPCs recoverable. Runtime failures are acknowledged and visible in last.json / the entry.
     const unfinished = instances.some(item => item.status === 'failed' && !item.entries)

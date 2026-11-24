@@ -15,5 +15,6 @@ export const qqOfficialSettings: BuiltinConfig<QQOfficialConfig> = {
   },
   notice: value => missing(value) ? '还没有填写 AppID 和 AppSecret' : undefined,
   secrets: ['secret'],
-  initial: () => ({ enabled: false }),
+  // On for a new instance: until AppID and AppSecret are filled in it only waits, and its card says so
+  initial: () => ({ enabled: true }),
 }

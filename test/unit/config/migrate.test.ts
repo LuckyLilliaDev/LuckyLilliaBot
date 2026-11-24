@@ -80,7 +80,9 @@ describe('migrateToInstances', () => {
       expect(read('instances', name, 'plugins.json').entries).toEqual([{ id: 'a1', name: 'p' }, loginMethodKept])
     }
     expect(existsSync(at('email_config.json.bak'))).toBe(true)
-    expect(existsSync(at('webui_token.txt.bak'))).toBe(true)
+    // Kept: the WebUI password of all instances under the manager
+    expect(readFileSync(at('webui_token.txt'), 'utf8')).toBe('secret')
+    expect(existsSync(at('webui_token.txt.bak'))).toBe(false)
   })
 
   it('keeps the login method released versions had, the pure protocol on Linux, over the new defaults', () => {

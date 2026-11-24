@@ -4,7 +4,7 @@
 //   node test/manual/core-update.mjs
 import { spawn, execSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, openSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, openSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -19,19 +19,31 @@ const PORT = 3987
 const log = (...args) => console.log('[e2e]', ...args)
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
-// The installed 9.0.0, with some user data and a file the package does not carry
+// The installed build, with some user data and a file the package does not carry
 cpSync(path.join(bot, 'dist'), installed, { recursive: true })
 rmSync(path.join(installed, 'data'), { recursive: true, force: true })
 writeFileSync(path.join(installed, 'node.exe.marker'), 'not in the package')
+const currentVersion = JSON.parse(readFileSync(path.join(installed, 'package.json'), 'utf8')).version
+const [maj, min, pat] = currentVersion.split('.').map(Number)
+const nextVersion = `${maj}.${min}.${(pat || 0) + 1}`
 
-// The 9.0.1 release: the same build, reporting 9.0.1, under the new package name
+// The next release: the same build, reporting nextVersion, under the new package name
 cpSync(path.join(bot, 'dist'), release, { recursive: true })
 rmSync(path.join(release, 'data'), { recursive: true, force: true })
-const core = path.join(release, 'llbot-core.js')
-writeFileSync(core, readFileSync(core, 'utf8').replaceAll('"9.0.0"', '"9.0.1"'))
+const patchVersion = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory() && entry.name === 'chunks') patchVersion(full)
+    else if (entry.isFile() && entry.name.endsWith('.js')) {
+      const content = readFileSync(full, 'utf8')
+      if (content.includes(`"${currentVersion}"`)) writeFileSync(full, content.replaceAll(`"${currentVersion}"`, `"${nextVersion}"`))
+    }
+  }
+}
+patchVersion(release)
 const manifest = JSON.parse(readFileSync(path.join(release, 'package.json'), 'utf8'))
-writeFileSync(path.join(release, 'package.json'), JSON.stringify({ ...manifest, name: PACKAGE, version: '9.0.1' }))
-writeFileSync(path.join(release, 'release-marker.txt'), '9.0.1')
+writeFileSync(path.join(release, 'package.json'), JSON.stringify({ ...manifest, name: PACKAGE, version: nextVersion }))
+writeFileSync(path.join(release, 'release-marker.txt'), nextVersion)
 const tgz = path.join(work, 'release.tgz')
 execSync(`tar --force-local -czf "${tgz.replaceAll('\\', '/')}" -C "${path.dirname(release).replaceAll('\\', '/')}" package`)
 const tarball = readFileSync(tgz)
@@ -43,8 +55,8 @@ const registry = createServer((req, res) => {
   if (decodeURIComponent(req.url) === `/${PACKAGE}`) {
     res.setHeader('content-type', 'application/json')
     return res.end(JSON.stringify({
-      name: PACKAGE, 'dist-tags': { latest: '9.0.1' },
-      versions: { '9.0.1': { name: PACKAGE, version: '9.0.1', engines: { node: '>=22.15' }, dist: { tarball: `http://127.0.0.1:${registry.address().port}/release.tgz`, integrity } } },
+      name: PACKAGE, 'dist-tags': { latest: nextVersion },
+      versions: { [nextVersion]: { name: PACKAGE, version: nextVersion, engines: { node: '>=22.15' }, dist: { tarball: `http://127.0.0.1:${registry.address().port}/release.tgz`, integrity } } },
     }))
   }
   if (req.url === '/release.tgz') return res.end(tarball)
@@ -94,26 +106,26 @@ let failed = false
 const expect = (label, ok) => { log((ok ? 'PASS ' : 'FAIL ') + label); if (!ok) failed = true }
 try {
   const before = await waitFor('the WebUI', async () => { const body = await api('/status'); last = JSON.stringify(body); return body.data })
-  expect('runs 9.0.0 at first', before.current === '9.0.0')
+  expect(`runs ${currentVersion} at first`, before.current === currentVersion)
   expect('not blocked under the supervisor', !before.blocked)
   const checked = (await api('/check', 'POST')).data
   log('check', JSON.stringify(checked))
-  expect('finds 9.0.1 available', checked.latest === '9.0.1' && checked.available)
-  const started = (await api('/update', 'POST', { version: '9.0.1' }))
+  expect(`finds ${nextVersion} available`, checked.latest === nextVersion && checked.available)
+  const started = (await api('/update', 'POST', { version: nextVersion }))
   log('update', JSON.stringify(started))
   expect('update accepted and restarting', started.success && started.data.state === 'restarting')
-  const after = await waitFor('9.0.1 to answer', async () => {
+  const after = await waitFor(`${nextVersion} to answer`, async () => {
     const status = (await api('/status')).data
-    return status?.current === '9.0.1' && status
+    return status?.current === nextVersion && status
   })
-  expect('runs 9.0.1 after the restart', after.current === '9.0.1')
+  expect(`runs ${nextVersion} after the restart`, after.current === nextVersion)
   expect('the same supervisor is still running', supervisorExit === undefined)
-  expect('package files replaced', readFileSync(path.join(installed, 'release-marker.txt'), 'utf8') === '9.0.1'
-    && JSON.parse(readFileSync(path.join(installed, 'package.json'), 'utf8')).version === '9.0.1')
+  expect('package files replaced', readFileSync(path.join(installed, 'release-marker.txt'), 'utf8') === nextVersion
+    && JSON.parse(readFileSync(path.join(installed, 'package.json'), 'utf8')).version === nextVersion)
   expect('data kept', readFileSync(path.join(installed, 'data', 'user-file.txt'), 'utf8') === 'keep me'
-    && existsSync(path.join(instance, 'webui_token.txt')))
+    && existsSync(path.join(installed, 'data', 'webui_token.txt')))
   expect('file outside the package kept', existsSync(path.join(installed, 'node.exe.marker')))
-  expect('old version backed up', existsSync(path.join(installed, '.llbot-update', 'backup-9.0.0', 'llbot-core.js')))
+  expect('old version backed up', existsSync(path.join(installed, '.llbot-update', `backup-${currentVersion}`, 'llbot-core.js')))
   const restarted = readFileSync(path.join(work, 'bot.log'), 'utf8').includes('[supervisor] 正在重启 Bot')
   expect('the supervisor logged the restart', restarted)
 } catch (error) {

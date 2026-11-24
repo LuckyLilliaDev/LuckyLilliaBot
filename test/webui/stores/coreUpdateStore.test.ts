@@ -14,6 +14,7 @@ vi.mock('@/plugin/internal/service/webui/FE/components/common', () => ({
 }))
 
 import {
+  coreUpdateProgressMessage,
   PREFS_STORAGE_KEY,
   readUpdatePrefs,
   shouldShowBanner,
@@ -83,6 +84,18 @@ describe('core update reminder preferences', () => {
 
     // A newer release overrides the snooze immediately
     expect(shouldShowBanner(availableStatus('9.2.0'), snoozed, now + 1000)).toBe(true)
+  })
+
+  it('produces a persistent progress message only while downloading, installing, or restarting', () => {
+    expect(coreUpdateProgressMessage(null, null)).toBeNull()
+    expect(coreUpdateProgressMessage(availableStatus('9.1.0'), null)).toBeNull()
+    expect(coreUpdateProgressMessage({ ...availableStatus('9.1.0'), state: 'checking' }, null)).toBeNull()
+
+    expect(coreUpdateProgressMessage({ ...availableStatus('9.1.0'), state: 'downloading' }, null)).toBe('正在下载 9.1.0…')
+    expect(coreUpdateProgressMessage({ ...availableStatus('9.1.0'), state: 'installing' }, null)).toBe('正在安装 9.1.0…')
+    expect(coreUpdateProgressMessage({ ...availableStatus('9.1.0'), state: 'restarting' }, null)).toBe('正在重启到 9.1.0，完成后页面会自动刷新…')
+    expect(coreUpdateProgressMessage(availableStatus('9.1.0'), '9.1.0', false)).toBe('正在重启到 9.1.0，完成后页面会自动刷新…')
+    expect(coreUpdateProgressMessage(availableStatus('9.1.0'), '9.1.0', true)).toBe('Bot 重启的时间比预期长，可以稍后手动刷新页面')
   })
 })
 

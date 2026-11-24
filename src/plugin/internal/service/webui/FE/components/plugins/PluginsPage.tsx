@@ -8,6 +8,7 @@ import { contributionKey, useRegistry } from '../../plugin-host/registry'
 import { configurableSlots } from '../../plugin-host/slotLayout'
 import { showToast } from '../common'
 import type { PluginStatus } from '../../types/plugins'
+import { instanceStorageKey } from '../../utils/base'
 import { getPluginDetails, reloadPlugin, removeMissingPlugin, scanPlugins, TrustRequiredError, uninstallPlugin } from '../../utils/pluginApi'
 import PluginCard from './PluginCard'
 import { findConflicts, pluginDescription, pluginTitle } from './meta'
@@ -29,13 +30,15 @@ interface View extends PluginFilters { mode: string; page: number }
 const DEFAULT_VIEW: View = { mode: 'list', installation: 'all', category: 'all', status: 'all', origin: 'all', search: '', updatesOnly: false, page: 1 }
 function loadView(): View {
   try {
-    const saved = JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? '{}')
+    const saved = JSON.parse(sessionStorage.getItem(instanceStorageKey(VIEW_KEY)) ?? '{}')
     return { ...DEFAULT_VIEW, ...saved, mode: 'list', installation: 'all', page: 1, updatesOnly: false }
   } catch { return DEFAULT_VIEW }
 }
 function loadLayout(): ListLayout {
   try {
-    return localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'card'
+    const scoped = localStorage.getItem(instanceStorageKey(LAYOUT_KEY))
+    const value = scoped ?? localStorage.getItem(LAYOUT_KEY)
+    return value === 'list' ? 'list' : 'card'
   } catch { return 'card' }
 }
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -72,8 +75,8 @@ const PluginsPage: React.FC = () => {
     } catch (e) { setListError(errorText(e)) }
   }, [])
   useEffect(() => { void refresh() }, [refresh])
-  useEffect(() => { sessionStorage.setItem(VIEW_KEY, JSON.stringify(view)) }, [view])
-  useEffect(() => { try { localStorage.setItem(LAYOUT_KEY, layout) } catch {} }, [layout])
+  useEffect(() => { sessionStorage.setItem(instanceStorageKey(VIEW_KEY), JSON.stringify(view)) }, [view])
+  useEffect(() => { try { localStorage.setItem(instanceStorageKey(LAYOUT_KEY), layout) } catch {} }, [layout])
   useEffect(() => () => { if (highlightTimer.current) clearTimeout(highlightTimer.current) }, [])
   const update = (patch: Partial<View>) => setView(previous => ({ ...previous, page: 1, ...patch }))
   const pageSize = layout === 'list' ? LIST_PAGE_SIZE : CARD_PAGE_SIZE

@@ -26,9 +26,29 @@ export async function lockInstance(name: string): Promise<() => void> {
   const dir = path.join(STATE_DIR, 'instances')
   mkdirSync(dir, { recursive: true })
   const holderFile = path.join(dir, `${name}.json`)
+  return acquire(name, holderFile, () => lockedMessage(name, holderFile))
+}
+
+/** Never an instance name: those start with a letter or digit */
+const MANAGER_LOCK = '_manager'
+
+/**
+ * One instance manager (llbot-manager.js) per data directory: a second one would start the same instances again and
+ * fight over the gateway. Same kind of OS endpoint as the instance locks, so a killed manager leaves nothing behind.
+ */
+export async function lockManager(): Promise<() => void> {
+  mkdirSync(STATE_DIR, { recursive: true })
+  const holderFile = path.join(STATE_DIR, 'manager.json')
+  return acquire(MANAGER_LOCK, holderFile, () => {
+    const who = holderOf(holderFile)
+    return `已经有一个管理进程在使用这个数据目录${who}：所有实例都由它统一管理，请在 WebUI 的实例管理中启动或停止实例`
+  })
+}
+
+async function acquire(name: string, holderFile: string, message: () => string): Promise<() => void> {
   for (const endpoint of endpointsFor(name)) {
     const server = await listen(endpoint)
-    if (server === 'held') throw new InstanceLockedError(lockedMessage(name, holderFile))
+    if (server === 'held') throw new InstanceLockedError(message())
     if (server === 'unsupported') continue
     const holder: Holder = { pid: process.pid, host: hostname(), since: Date.now() }
     try {
@@ -48,7 +68,7 @@ export async function lockInstance(name: string): Promise<() => void> {
     process.on('exit', release)
     return release
   }
-  throw new Error(`没法为实例 ${name} 建立实例锁`)
+  throw new Error(`没法为 ${name === MANAGER_LOCK ? '管理进程' : `实例 ${name}`} 建立锁`)
 }
 
 /**
@@ -116,15 +136,18 @@ function answers(endpoint: string): Promise<boolean> {
   })
 }
 
-function lockedMessage(name: string, holderFile: string): string {
-  let who = ''
+function holderOf(holderFile: string): string {
   try {
     const holder = JSON.parse(readFileSync(holderFile, 'utf8')) as Holder
-    who = holder.host === hostname() ? `（pid ${holder.pid}）` : `（${holder.host} 上的 pid ${holder.pid}）`
+    return holder.host === hostname() ? `（pid ${holder.pid}）` : `（${holder.host} 上的 pid ${holder.pid}）`
   } catch {
     // The message works without it
+    return ''
   }
-  return `实例 ${name} 已经在运行${who}：一个实例同一时间只能由一个进程使用。` +
+}
+
+function lockedMessage(name: string, holderFile: string): string {
+  return `实例 ${name} 已经在运行${holderOf(holderFile)}：一个实例同一时间只能由一个进程使用。` +
     `要同时再运行一个，请用 --instance <名字> 指定另一个实例`
 }
 

@@ -1,6 +1,7 @@
 import { PluginsPage } from '../components/plugins'
 import { useRegistry, WEBUI } from '../plugin-host/registry'
 import AboutPage from './AboutPage'
+import InstancesPage from './InstancesPage'
 import WebuiPage from './WebuiPage'
 
 let registered = false
@@ -18,4 +19,18 @@ export function registerCorePages() {
   add({ kind: 'page', owner: WEBUI, key: 'plugins', title: '插件', icon: 'puzzle', order: 40, settings: false, locked: true, component: PluginsPage })
   add({ kind: 'page', owner: WEBUI, key: 'webui', title: '页面设置', icon: 'settings', order: 900, settings: true, component: WebuiPage })
   add({ kind: 'page', owner: WEBUI, key: 'about', title: '关于', icon: 'info', order: 1000, settings: false, component: AboutPage })
+}
+
+/** Registers the Instances page when running under the unified instance manager; returns the cleanup callback. */
+export function registerInstancesPage(): () => void {
+  return useRegistry.getState().add({
+    kind: 'page',
+    owner: WEBUI,
+    key: 'instances',
+    title: '实例管理',
+    icon: 'server',
+    order: 850,
+    settings: true,
+    component: InstancesPage,
+  })
 }

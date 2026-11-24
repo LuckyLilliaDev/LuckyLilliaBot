@@ -84,11 +84,11 @@ describe('builtin plugins', () => {
     const states = () => Object.fromEntries(ctx.plugins.list().map(status => [status.name, status.state]))
     const shell = [
       'builtin:webui', 'builtin:dashboard', 'builtin:logs', 'builtin:satori', 'builtin:commands', 'builtin:database',
-      'builtin:market', 'builtin:proxy', 'builtin:message-order',
+      'builtin:market', 'builtin:proxy', 'builtin:message-order', 'builtin:qq-official',
     ]
     await vi.waitFor(() => expect(shell.map(name => states()[name])).toEqual(shell.map(() => 'active')))
-    const off = ['builtin:qq-official']
-    for (const name of off) expect(ctx.plugins.get(id(name))).toMatchObject({ state: 'disposed', disabled: true })
+    // On by default; without AppID and AppSecret it only waits
+    expect(ctx.plugins.get(id('builtin:qq-official'))).toMatchObject({ disabled: false, notice: '还没有填写 AppID 和 AppSecret' })
     // Features requiring an NT account can wait without preventing the host, database or Satori from running.
     for (const name of ['builtin:nt-protocol', 'builtin:ntqq-universal', 'builtin:onebot11', 'builtin:milky', 'builtin:email-notification', 'builtin:webqq']) {
       expect(states()).not.toHaveProperty(name)
@@ -135,7 +135,7 @@ describe('builtin plugins', () => {
     await vi.waitFor(async () => expect(await listening(satoriPort)).toBe(false))
   })
 
-  it('switches the official bot on before its credentials are in: it waits for them, saving checks them', async () => {
+  it('runs the official bot from the start without credentials: it waits for them, saving checks them', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string) => {
       if (new URL(input).pathname === '/app/getAppAccessToken') {
         return new Response(JSON.stringify({ access_token: 'tok', expires_in: '7200' }), { status: 200 })
@@ -149,9 +149,8 @@ describe('builtin plugins', () => {
     const builtins = builtinPlugins.filter(builtin => builtin.name === 'builtin:qq-official')
     const service = await ctx.plugin(PluginService, { file: path.join(tmp, 'qq-official.json'), roots: [], resolver: false, builtins })
     try {
-      const [{ id }] = ctx.plugins.list()
-      expect(ctx.plugins.list()[0].notice).toBeUndefined()
-      const enabled = await ctx.plugins.enable(id)
+      const [enabled] = ctx.plugins.list()
+      const id = enabled.id
       expect(enabled).toMatchObject({ state: 'active', disabled: false, notice: '还没有填写 AppID 和 AppSecret' })
       expect(enabled.error).toBeUndefined()
       expect(ctx.bots.size).toBe(0)

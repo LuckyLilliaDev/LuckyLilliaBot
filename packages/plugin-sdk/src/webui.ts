@@ -414,6 +414,12 @@ export interface WebUIContext {
   fetch(path: string, init?: RequestInit): Promise<Response>
   /** The path with the WebUI login in its query: for `<img>`, `<video>`, downloads and the like, which send no headers. */
   authUrl(path: string): string
+  /**
+   * A root path of the bot (`/face/1.png`, `/api/...`) as the browser has to request it: under `/i/<instance>/` when
+   * the instance manager serves several instances on one address, unchanged otherwise. `api()`, `fetch()`,
+   * `authUrl()` and `events()` already do this. Missing on hosts before the manager: use `ctx.url?.(path) ?? path`.
+   */
+  url?(path: string): string
   /** Address of one of this plugin's pages, for links and `window.open()`; `fullscreen` opens it without the sidebar. */
   pageHref(id: string, options?: { fullscreen?: boolean }): string
   /**

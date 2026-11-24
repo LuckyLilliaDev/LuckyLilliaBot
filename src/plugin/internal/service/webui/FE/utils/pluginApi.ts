@@ -1,4 +1,5 @@
 import { apiFetch, ApiError, getToken } from './api'
+import { withBase } from './base'
 import {
   ConfigIssue, DependencyReport, EntryScope, PluginDescription, PluginDetails, PluginStatus, ReloadResult, UiPrefs,
   UiPrefsPatch,
@@ -15,7 +16,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.data
 }
 
-export const listPlugins = () => request<PluginStatus[]>('')
+/** The module and icon of a package are root paths of the bot: under the gateway they are the instance's */
+export function servedFrom(status: PluginStatus): PluginStatus {
+  if (!status.webui && !status.iconUrl) return status
+  return {
+    ...status,
+    ...status.webui ? { webui: withBase(status.webui) } : {},
+    ...status.iconUrl ? { iconUrl: withBase(status.iconUrl) } : {},
+  }
+}
+
+export const listPlugins = async () => (await request<PluginStatus[]>('')).map(servedFrom)
 export const getPluginDirectories = () => request<{ roots: string[] }>('/directories')
 
 export const scanPlugins = () =>
@@ -64,7 +75,14 @@ export const describePlugin = (id: string) => request<PluginDescription>(`/${id}
 
 export const getPluginDependencies = (id: string) => request<DependencyReport>(`/${id}/dependencies`)
 
-export const getPluginDetails = (id: string) => request<PluginDetails>(`/${id}/details`)
+export const getPluginDetails = async (id: string): Promise<PluginDetails> => {
+  const details = await request<PluginDetails>(`/${id}/details`)
+  return {
+    ...details,
+    base: details.base ? withBase(details.base) : details.base,
+    screenshots: details.screenshots?.map(shot => ({ ...shot, url: withBase(shot.url) })),
+  }
+}
 
 export const getUiPrefs = () => request<UiPrefs>('/ui')
 
@@ -111,13 +129,14 @@ export type PluginStreamEvent = { type: 'status'; data: PluginStatus } | { type:
  */
 export function openPluginStream(onEvent: (event: PluginStreamEvent) => void, onConnected?: () => void): () => void {
   const token = getToken() || ''
-  const source = new EventSource(`${BASE}/stream?token=${encodeURIComponent(token)}`)
+  const source = new EventSource(withBase(`${BASE}/stream?token=${encodeURIComponent(token)}`))
   source.addEventListener('connected', () => {
     onConnected?.()
   })
   source.addEventListener('changed', (event) => {
     try {
-      onEvent(JSON.parse((event as MessageEvent).data))
+      const change = JSON.parse((event as MessageEvent).data) as PluginStreamEvent
+      onEvent(change.type === 'status' ? { ...change, data: servedFrom(change.data) } : change)
     } catch {
       // malformed frame, the next one carries the full status again
     }

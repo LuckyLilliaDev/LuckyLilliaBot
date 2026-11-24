@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { lstat, mkdir, readdir, readFile, rename, rm } from 'node:fs/promises'
+import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { gunzip } from 'node:zlib'
@@ -10,6 +10,7 @@ import { version as runningVersion } from '../version'
 import { canRestart, requestRestart } from './hostLifecycle'
 import { currentInstance } from '@/common/instance'
 import { runningInstances } from './instanceLock'
+import { isManaged } from './manager/protocol'
 import { FAILED_RUNTIME_DIR_NAME, inContainer, RELEASE_NAMES, runtimeDir, RUNTIME_DIR_NAME } from './runtime'
 import { isExactVersion, matches, Registries, RegistryError, type PackageVersion, type RegistryClient } from '../plugin/internal/tool/market/registry'
 import { MarketSchema, registriesOf, type MarketSettings } from '../plugin/internal/tool/market/settings'
@@ -31,6 +32,20 @@ const RELEASE_NOTES_CACHE_TTL = 10 * 60 * 1000
 const RELEASE_NOTES_TIMEOUT = 15_000
 /** Never replaced, whatever a package carries: the user's data, and this updater's own work */
 const PROTECTED = new Set(['data', WORK_DIR])
+const INSTALLED_MANIFEST = 'installed-files.json'
+/** Release entries a previous version may have placed before INSTALLED_MANIFEST existed */
+const KNOWN_RELEASE_ENTRIES = new Set([
+  'llbot.js',
+  'llbot.js.map',
+  'llbot-core.js',
+  'llbot-core.js.map',
+  'llbot-manager.js',
+  'llbot-manager.js.map',
+  'chunks',
+  'webui',
+  'node_modules',
+  'package.json',
+])
 const MAX_TAR = 1024 * 1024 * 1024
 
 export class CoreUpdateError extends Error {
@@ -72,6 +87,10 @@ export interface CoreUpdaterOptions {
   fetch?: (url: string, init?: RequestInit) => Promise<Response>
   /** Why it cannot update itself right now, if it cannot */
   blocker?: () => Promise<string | undefined>
+  /** Runs after download/extract/verify and right before files are replaced (e.g. manager stops all instances) */
+  beforeReplace?: () => Promise<void>
+  /** Runs when replacing files failed after `beforeReplace` already stopped instances */
+  onReplaceFailed?: () => Promise<void>
   /** Shuts down and has the supervisor start the new version; false when nothing would start it again */
   restart?: () => boolean
   log?: { info(message: string): void; warn(message: string): void }
@@ -229,16 +248,26 @@ export class CoreUpdater {
       await rm(staged, { recursive: true, force: true })
       await extractPackage(tar, staged)
       await checkStaged(staged, version)
-      if (container) {
-        await replaceRuntime(staged, runtime)
-        this.options.log?.info(`已把 ${version} 安装到数据卷中的 ${runtime}；正在重启`)
-      } else {
-        const backup = path.join(work, `backup-${this.current}`)
-        await rm(backup, { recursive: true, force: true })
-        await mkdir(backup, { recursive: true })
-        await replaceInstall(this.options.installDir, staged, backup)
-        await rm(staged, { recursive: true, force: true })
-        this.options.log?.info(`已更新到 ${version}，旧版本的文件在 ${backup}；正在重启`)
+      let stoppedForReplace = false
+      if (this.options.beforeReplace) {
+        await this.options.beforeReplace()
+        stoppedForReplace = true
+      }
+      try {
+        if (container) {
+          await replaceRuntime(staged, runtime)
+          this.options.log?.info(`已把 ${version} 安装到数据卷中的 ${runtime}；正在重启`)
+        } else {
+          const backup = path.join(work, `backup-${this.current}`)
+          await rm(backup, { recursive: true, force: true })
+          await mkdir(backup, { recursive: true })
+          await replaceInstall(this.options.installDir, staged, backup)
+          await rm(staged, { recursive: true, force: true })
+          this.options.log?.info(`已更新到 ${version}，旧版本的文件在 ${backup}；正在重启`)
+        }
+      } catch (replaceError) {
+        if (stoppedForReplace) await this.options.onReplaceFailed?.().catch(() => {})
+        throw replaceError
       }
       this.state = 'restarting'
       setTimeout(() => {
@@ -339,18 +368,44 @@ export interface RenameOps {
 }
 
 /**
- * Moves each entry of `staged` into `installDir`, the entry it replaces into `backup` first. When a move fails,
- * every move made so far is undone in reverse, so the installation is the old one again.
+ * Moves each entry of `staged` into `installDir`, the entry it replaces into `backup` first, and moves away
+ * obsolete release entries that no longer exist in `staged` (never touching user files like `node.exe` or `data/`).
+ * When a move fails, every move made so far is undone in reverse, so the installation is the old one again.
  */
 export async function replaceInstall(installDir: string, staged: string, backup: string, ops: RenameOps = { rename }): Promise<void> {
   const names = (await readdir(staged)).filter(name => !PROTECTED.has(name))
+  const stagedSet = new Set(names)
+  const manifestPath = path.join(installDir, WORK_DIR, INSTALLED_MANIFEST)
+  const knownOld = new Set(KNOWN_RELEASE_ENTRIES)
+  try {
+    const previous = JSON.parse(await readFile(manifestPath, 'utf8'))
+    if (Array.isArray(previous)) {
+      for (const entry of previous) {
+        if (typeof entry === 'string' && !PROTECTED.has(entry)) knownOld.add(entry)
+      }
+    }
+  } catch {
+    // First update before manifest existed
+  }
+  const stale = (await readdir(installDir)).filter(
+    name => !PROTECTED.has(name) && !stagedSet.has(name) && knownOld.has(name),
+  )
+
   const done: { name: string; replaced: boolean; placed: boolean }[] = []
   try {
+    for (const name of stale) {
+      const target = path.join(installDir, name)
+      await ops.rename(target, path.join(backup, name))
+      done.push({ name, replaced: true, placed: false })
+    }
     for (const name of names) {
       const target = path.join(installDir, name)
-      const step = { name, replaced: await exists(target), placed: false }
+      const step = { name, replaced: false, placed: false }
+      if (await exists(target)) {
+        await ops.rename(target, path.join(backup, name))
+        step.replaced = true
+      }
       done.push(step)
-      if (step.replaced) await ops.rename(target, path.join(backup, name))
       await ops.rename(path.join(staged, name), target)
       step.placed = true
     }
@@ -371,6 +426,9 @@ export async function replaceInstall(installDir: string, staged: string, backup:
     }
     throw new CoreUpdateError(`替换文件失败（${reason}），已还原为原来的版本`, 409)
   }
+  if (existsSync(path.join(installDir, WORK_DIR))) {
+    await writeFile(manifestPath, JSON.stringify(names, null, 2) + '\n').catch(() => {})
+  }
 }
 
 async function exists(file: string): Promise<boolean> {
@@ -382,8 +440,23 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
+/** Resolves dist/ even when this module is placed inside dist/chunks/ by the bundler */
+export function installDirOf(fromDir: string): string {
+  if (existsSync(path.join(fromDir, 'llbot-core.js'))) return fromDir
+  const parent = path.dirname(fromDir)
+  if (existsSync(path.join(parent, 'llbot-core.js'))) return parent
+  return fromDir
+}
+
+export interface UpdateBlockerOptions {
+  /** Whether a supervisor will restart this process on RESTART_EXIT_CODE (defaults to canRestart()) */
+  supervised?: boolean
+  /** Instances that will be stopped by this updater itself and therefore do not block an update */
+  ignoreInstances?: Iterable<string>
+}
+
 /** Why the installation in `installDir` cannot update itself, checked in order of what the user can change */
-export async function updateBlocker(installDir: string): Promise<string | undefined> {
+export async function updateBlocker(installDir: string, options: UpdateBlockerOptions = {}): Promise<string | undefined> {
   let name: unknown
   try {
     name = JSON.parse(readFileSync(path.join(installDir, 'package.json'), 'utf8')).name
@@ -393,8 +466,9 @@ export async function updateBlocker(installDir: string): Promise<string | undefi
   if (!RELEASE_NAMES.includes(name as string) || !existsSync(path.join(installDir, 'llbot-core.js'))) {
     return '从源码运行时不能自动更新'
   }
-  if (!canRestart()) return '以 --no-supervisor 启动时不能自动更新'
-  const others = await runningInstances(currentInstance().name)
+  if (!(options.supervised ?? canRestart())) return '以 --no-supervisor 启动时不能自动更新'
+  const ignored = new Set(options.ignoreInstances ?? [currentInstance().name])
+  const others = (await runningInstances()).filter(instance => !ignored.has(instance))
   if (others.length) return `实例 ${others.join('、')} 也在用这份程序运行，请先停止它们再更新`
 }
 
@@ -444,7 +518,9 @@ export const inject = ['plugins', 'http']
 
 /** Mounts the updater: /api/core-update/status, /check, /update and /release-notes, behind the WebUI login */
 export function apply(ctx: Context) {
-  const installDir = import.meta.dirname
+  // Under llbot-manager.js the manager owns core updates for all instances and serves /api/core-update/* directly
+  if (isManaged()) return
+  const installDir = installDirOf(import.meta.dirname)
   const log = ctx.logger('core-update')
   const updater = new CoreUpdater({
     installDir,

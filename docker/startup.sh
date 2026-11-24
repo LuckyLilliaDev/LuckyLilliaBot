@@ -2,16 +2,9 @@
 
 cd /app/llbot
 
-FILE="default_config.json"
-WEBUI_PORT="${WEBUI_PORT:-3080}"
-
-sed -i "/\"webui\": {/,/}/ {
-    s/\"port\":[[:space:]]*3080/\"port\": ${WEBUI_PORT}/g
-}" "$FILE"
-
-sed -i "/\"webui\": {/,/}/ {
-    s/\"host\":[[:space:]]*\"127.0.0.1\"/\"host\": \"\"/g
-}" "$FILE"
+# Unified gateway address: bind all interfaces in the container by default and honour WEBUI_PORT
+export LLBOT_WEBUI_HOST="${LLBOT_WEBUI_HOST-}"
+export LLBOT_WEBUI_PORT="${LLBOT_WEBUI_PORT:-${WEBUI_PORT:-3080}}"
 
 mkdir -p /app/llbot/data
 
@@ -26,8 +19,8 @@ if [ "$PROTOCOL_MODE" = "nativeqq" ]; then
 fi
 
 # 纯协议 (PROTOCOL_MODE 为空或 direct): --direct 锁定登录方式, 标准镜像里没有 QQ, 不能切到桥接
-# 指定 AUTO_LOGIN_QQ 重启后自动免扫码快速登录。
-# 不设 AUTO_LOGIN_QQ 则起在 WebUI 登录页, 由用户从快速登录列表点选账号 (或扫码)
+# 指定 AUTO_LOGIN_QQ 重启后自动免扫码快速登录（仅作用于目标实例，默认 default）。
+# 不设 AUTO_LOGIN_QQ 则起在 WebUI, 可在实例管理页管理多个实例并扫码/快速登录
 if [ -n "$AUTO_LOGIN_QQ" ]; then
   exec node --enable-source-maps ./llbot.js --direct -q "$AUTO_LOGIN_QQ" "$@"
 fi

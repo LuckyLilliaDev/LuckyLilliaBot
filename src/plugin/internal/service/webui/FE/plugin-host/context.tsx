@@ -5,6 +5,7 @@ import type { ApiOptions, WebUIContext } from '@luckylillia-dev/plugin-sdk/webui
 import { showToast } from '../components/common'
 import { pluginTitle } from '../components/plugins/meta'
 import { apiFetch, authorizedFetch, getToken } from '../utils/api'
+import { withBase } from '../utils/base'
 import { clearFailure, reportFailure } from './failures'
 import { usePluginList } from './pluginList'
 import { Contribution, useRegistry } from './registry'
@@ -36,8 +37,9 @@ export function pageKey(owner: string, builtin: boolean, id: string): string {
   return builtin ? id : `${owner}:${id}`
 }
 
+/** A root path of this instance with the login in the query: for event streams, images and links */
 export function withToken(path: string): string {
-  return `${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(getToken() ?? '')}`
+  return withBase(`${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(getToken() ?? '')}`)
 }
 
 /** Everything registered through it is passed to `track`, so that unloading the plugin removes it. */
@@ -126,6 +128,7 @@ export function createWebUIContext(owner: string, builtin: boolean, track: (disp
     },
     fetch: (path, init) => authorizedFetch(path, init),
     authUrl: withToken,
+    url: path => withBase(path),
     pageHref: (id, options = {}) => `#${pageKey(owner, builtin, id)}${options.fullscreen ? '?fullscreen' : ''}`,
     events(path, listeners) {
       const source = new EventSource(withToken(path))

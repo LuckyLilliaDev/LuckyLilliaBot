@@ -1,20 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { ArrowUpCircle, FileText, Loader2, X } from 'lucide-react'
+import { ArrowUpCircle, FileText, X } from 'lucide-react'
 import { usePluginList } from '../../plugin-host/pluginList'
 import { useBots } from '../../stores/botsStore'
-import { shouldShowBanner, useCoreUpdateStore, type CoreUpdateStatus } from '../../stores/coreUpdateStore'
+import { coreUpdateProgressMessage, shouldShowBanner, useCoreUpdateStore } from '../../stores/coreUpdateStore'
 import { pluginCategory } from '../plugins/listing'
 
 // Status of @satorijs/protocol
 const ONLINE = 1
-
-const STATE_TEXT: Record<CoreUpdateStatus['state'], string> = {
-  idle: '',
-  checking: '正在检查…',
-  downloading: '正在下载新版本…',
-  installing: '正在安装新版本…',
-  restarting: '正在重启…',
-}
 
 interface StatusNoticesProps {
   activeTab: string
@@ -23,7 +15,7 @@ interface StatusNoticesProps {
 
 /**
  * What concerns the bot as a whole, above every page: no protocol plugin enabled and no bot online,
- * or a newer core release ready to install.
+ * or a newer core release ready to install. Active update progress is shown persistently by CoreUpdateBar.
  */
 const StatusNotices: React.FC<StatusNoticesProps> = ({ activeTab, onOpen }) => {
   const bots = useBots(state => state.bots)
@@ -32,7 +24,6 @@ const StatusNotices: React.FC<StatusNoticesProps> = ({ activeTab, onOpen }) => {
   const prefs = useCoreUpdateStore(state => state.prefs)
   const now = useCoreUpdateStore(state => state.now)
   const target = useCoreUpdateStore(state => state.target)
-  const waitedTooLong = useCoreUpdateStore(state => state.waitedTooLong)
   const bannerError = useCoreUpdateStore(state => state.bannerError)
   const startUpdate = useCoreUpdateStore(state => state.startUpdate)
   const skipVersion = useCoreUpdateStore(state => state.skipVersion)
@@ -48,29 +39,17 @@ const StatusNotices: React.FC<StatusNoticesProps> = ({ activeTab, onOpen }) => {
     && !bots.some(bot => bot.status === ONLINE)
     && !plugins.some(plugin => !plugin.disabled && pluginCategory(plugin) === 'protocol')
 
-  const updating = !!target || (!!status && (status.state === 'downloading' || status.state === 'installing' || status.state === 'restarting'))
-  // The About page already shows VersionCard with its own update controls and progress
-  const showUpdateProgress = activeTab !== 'about' && updating
+  const updating = !!coreUpdateProgressMessage(status, target)
+  // The About page already shows VersionCard with its own update buttons and error text
   const showUpdatePrompt = activeTab !== 'about' && !updating && shouldShowBanner(status, prefs, now)
   const showStandaloneError = activeTab !== 'about' && !updating && !showUpdatePrompt && !!bannerError
 
-  if (!showNoProtocol && !showUpdateProgress && !showUpdatePrompt && !showStandaloneError) return null
+  if (!showNoProtocol && !showUpdatePrompt && !showStandaloneError) return null
 
   const latest = status?.latest
 
   return (
     <div className="space-y-3 mb-6">
-      {showUpdateProgress && (
-        <div className="card px-5 py-3 flex items-center gap-3 text-sm text-theme-secondary">
-          <Loader2 size={16} className="animate-spin text-pink-500 shrink-0" />
-          <span>
-            {target
-              ? (waitedTooLong ? 'Bot 重启的时间比预期长，可以稍后手动刷新页面' : `正在重启到 ${target}，完成后页面会自动刷新…`)
-              : STATE_TEXT[status!.state]}
-          </span>
-        </div>
-      )}
-
       {showUpdatePrompt && latest && status && (
         <div className="card px-5 py-3 space-y-2 text-sm">
           <div className="flex flex-wrap items-center gap-3">

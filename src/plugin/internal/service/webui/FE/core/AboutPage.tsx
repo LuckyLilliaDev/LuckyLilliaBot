@@ -30,8 +30,8 @@ const AboutPage: React.FC = () => (
     <div className="card p-8 text-center">
       <div className="w-20 h-20 rounded-3xl overflow-hidden mx-auto mb-6 shadow-lg">
         <img
-          src="/logo-192.webp"
-          srcSet="/logo-128.webp 128w, /logo-192.webp 192w, /logo-256.webp 256w"
+          src="logo-192.webp"
+          srcSet="logo-128.webp 128w, logo-192.webp 192w, logo-256.webp 256w"
           sizes="80px"
           alt="Logo"
           className="w-full h-full object-cover"

@@ -5,8 +5,11 @@ import { Dict } from 'cosmokit'
 import { AdapterSections, Config as LLBotConfig } from '@/common/types'
 import { adapterDefaults, defaultConfig } from './defaultConfig'
 
-// Next to the bundle (dist/) or to this file in dev; docker/nix sed it before the first start
-const TEMPLATE_FILE = path.join(import.meta.dirname, 'default_config.json')
+// Next to the bundle (dist/) or to this file in dev; docker/nix sed it before the first start. The manager shares this
+// module with the core, so in dist/ it may sit in dist/chunks/: the template is then one directory up.
+const TEMPLATE_FILE = [import.meta.dirname, path.dirname(import.meta.dirname)]
+  .map(dir => path.join(dir, 'default_config.json'))
+  .find(file => fs.existsSync(file)) ?? path.join(import.meta.dirname, 'default_config.json')
 
 /** Top-level keys no version reads any more: dropped from the settings file and from incoming old-shape configs. */
 export const DEPRECATED_KEYS = ['onlyLocalhost', 'autoDeleteFile', 'autoDeleteFileSecond', 'cardMsgSignUrl', 'enableLocalFile2Url']

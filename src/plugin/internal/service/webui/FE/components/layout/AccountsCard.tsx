@@ -64,8 +64,8 @@ const AccountsCard: React.FC = () => {
         )) : (
           <div className='flex items-center gap-3 px-1 py-1'>
             <img
-              src='/logo-64.webp'
-              srcSet='/logo-64.webp 64w, /logo-128.webp 128w'
+              src='logo-64.webp'
+              srcSet='logo-64.webp 64w, logo-128.webp 128w'
               sizes='36px'
               alt=''
               className='w-9 h-9 rounded-full object-cover flex-shrink-0'

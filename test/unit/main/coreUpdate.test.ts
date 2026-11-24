@@ -171,7 +171,10 @@ describe('updating', () => {
     const backup = path.join(installDir, WORK_DIR, 'backup-9.0.0')
     expect(readFileSync(path.join(backup, 'llbot-core.js'), 'utf8')).toBe('core 9.0.0')
     expect(readFileSync(path.join(backup, 'node_modules/stale/index.js'), 'utf8')).toBe('only in 9.0.0')
-    expect(readdirSync(path.join(installDir, WORK_DIR))).toEqual(['backup-9.0.0'])
+    expect(readdirSync(path.join(installDir, WORK_DIR)).sort()).toEqual(['backup-9.0.0', 'installed-files.json'])
+    expect(JSON.parse(readFileSync(path.join(installDir, WORK_DIR, 'installed-files.json'), 'utf8'))).toEqual(
+      expect.arrayContaining(['llbot.js', 'llbot-core.js', 'node_modules', 'webui', 'chunks', 'package.json']),
+    )
 
     expect(restart).not.toHaveBeenCalled()
     await vi.runAllTimersAsync()
@@ -252,19 +255,79 @@ describe('replacing the installation', () => {
     expect(readFileSync(path.join(staged, 'llbot.js'), 'utf8')).toBe('new')
     expect(readdirSync(backup)).toEqual([])
   })
+
+  it('moves removed release entries like llbot-manager.js into backup while leaving non-release files untouched', async () => {
+    const staged = path.join(installDir, WORK_DIR, 'staging')
+    const backup = path.join(installDir, WORK_DIR, 'backup')
+    mkdirSync(staged, { recursive: true })
+    mkdirSync(backup, { recursive: true })
+    write('llbot-manager.js', 'old manager')
+    write('node.exe', 'bundled runtime')
+    writeFileSync(path.join(staged, 'llbot.js'), 'new supervisor')
+    writeFileSync(path.join(staged, 'llbot-core.js'), 'new core')
+
+    await replaceInstall(installDir, staged, backup)
+    expect(existsSync(path.join(installDir, 'llbot-manager.js'))).toBe(false)
+    expect(readFileSync(path.join(backup, 'llbot-manager.js'), 'utf8')).toBe('old manager')
+    expect(read('node.exe')).toBe('bundled runtime')
+    expect(read('llbot.js')).toBe('new supervisor')
+  })
+
+  it('restores removed stale entries when a subsequent move fails', async () => {
+    const staged = path.join(installDir, WORK_DIR, 'staging')
+    const backup = path.join(installDir, WORK_DIR, 'backup')
+    mkdirSync(staged, { recursive: true })
+    mkdirSync(backup, { recursive: true })
+    write('llbot-manager.js', 'old manager')
+    writeFileSync(path.join(staged, 'llbot.js'), 'new supervisor')
+    writeFileSync(path.join(staged, 'llbot-core.js'), 'new core')
+
+    const ops = {
+      rename: vi.fn(async (from: string, to: string) => {
+        if (from === path.join(installDir, 'llbot-core.js')) throw Object.assign(new Error('busy'), { code: 'EBUSY' })
+        await rename(from, to)
+      }),
+    }
+    await expect(replaceInstall(installDir, staged, backup, ops)).rejects.toThrow('已还原为原来的版本')
+    expect(read('llbot-manager.js')).toBe('old manager')
+    expect(read('llbot.js')).toBe('supervisor 9.0.0')
+    expect(read('llbot-core.js')).toBe('core 9.0.0')
+    expect(readdirSync(backup)).toEqual([])
+  })
+
+  it('uses installed-files.json to clean up custom release entries removed in a later update', async () => {
+    const staged1 = path.join(installDir, WORK_DIR, 'staging-1')
+    const backup1 = path.join(installDir, WORK_DIR, 'backup-1')
+    mkdirSync(staged1, { recursive: true })
+    mkdirSync(backup1, { recursive: true })
+    writeFileSync(path.join(staged1, 'llbot.js'), 'v1')
+    writeFileSync(path.join(staged1, 'custom-extra.js'), 'extra v1')
+    await replaceInstall(installDir, staged1, backup1)
+    expect(read('custom-extra.js')).toBe('extra v1')
+
+    const staged2 = path.join(installDir, WORK_DIR, 'staging-2')
+    const backup2 = path.join(installDir, WORK_DIR, 'backup-2')
+    mkdirSync(staged2, { recursive: true })
+    mkdirSync(backup2, { recursive: true })
+    writeFileSync(path.join(staged2, 'llbot.js'), 'v2')
+    await replaceInstall(installDir, staged2, backup2)
+    expect(existsSync(path.join(installDir, 'custom-extra.js'))).toBe(false)
+    expect(readFileSync(path.join(backup2, 'custom-extra.js'), 'utf8')).toBe('extra v1')
+  })
 })
 
 describe('cleaning up', () => {
-  it('removes interrupted downloads and keeps only the newest backup', async () => {
+  it('removes interrupted downloads, keeps only the newest backup, and preserves installed-files.json', async () => {
     const work = path.join(installDir, WORK_DIR)
     for (const [name, age] of [['backup-8.0.0', 300], ['backup-8.5.0', 200], ['backup-9.0.0', 100], ['staging-9.1.0', 0]] as const) {
       mkdirSync(path.join(work, name), { recursive: true })
       const time = new Date(Date.now() - age * 1000)
       utimesSync(path.join(work, name), time, time)
     }
+    writeFileSync(path.join(work, 'installed-files.json'), '["llbot.js"]\n')
     const { client } = fakeRegistry({})
     await updater(client).cleanup()
-    expect(readdirSync(work)).toEqual(['backup-9.0.0'])
+    expect(readdirSync(work).sort()).toEqual(['backup-9.0.0', 'installed-files.json'])
   })
 })
 

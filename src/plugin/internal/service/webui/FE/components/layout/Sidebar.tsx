@@ -13,6 +13,7 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
   /** Every entry: the pages of plugins, the WebUI's own included, in sidebar order. */
   pluginPages?: { id: string; title: string; icon: LucideIcon; badge?: boolean }[];
+  hideAccounts?: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -23,6 +24,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   collapsed = false,
   onToggleCollapse,
   pluginPages = [],
+  hideAccounts = false,
 }) => {
   const menuItems = pluginPages.map(page => ({ id: page.id, icon: page.icon, label: page.title, badge: page.badge }))
 
@@ -69,8 +71,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className='flex items-center gap-4'>
             <div className='w-12 h-12 rounded-2xl overflow-hidden shadow-lg flex-shrink-0'>
               <img
-                src='/logo-128.webp'
-                srcSet='/logo-64.webp 64w, /logo-128.webp 128w, /logo-192.webp 192w, /logo-256.webp 256w'
+                src='logo-128.webp'
+                srcSet='logo-64.webp 64w, logo-128.webp 128w, logo-192.webp 192w, logo-256.webp 256w'
                 sizes='48px'
                 alt='Logo'
                 className='w-full h-full object-cover'
@@ -78,7 +80,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className='flex-1 min-w-0'>
               <h1 className='text-xl font-bold text-theme truncate'>LLBot</h1>
-              <p className='text-xs text-theme-muted'>WebUI</p>
             </div>
             {/* 移动端关闭按钮 */}
             <button 
@@ -138,7 +139,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         <div className="px-3 py-2 empty:hidden"><SlotOutlet name="sidebar.footer" /></div>
-        <AccountsCard />
+        {!hideAccounts && <AccountsCard />}
       </div>
 
       {/* 桌面端展开按钮 - 当侧边栏收起时显示 */}

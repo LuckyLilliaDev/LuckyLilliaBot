@@ -384,12 +384,13 @@ export function apply(ctx: Context) {
 |---|---|
 | `ctx.api<T>(path, { method?, body? })` | 携带 WebUI 登录，返回响应 `{ success, data }` 中的 `data` |
 | `ctx.fetch(path, init?)` | 携带登录的原始 `fetch`，用于二进制、上传、流和自定义错误 |
-| `ctx.authUrl(path)` | 为图片、视频、下载等不能设置请求头的位置生成带鉴权 URL |
+| `ctx.url(path)` | 为公开路由或静态资源（如 `/my-plugin/asset.png`）补上当前实例的路径前缀，不附带登录 token |
+| `ctx.authUrl(path)` | 为图片、视频、下载等不能设置请求头的位置生成带前缀和鉴权的 URL |
 | `ctx.events(path, listeners)` | 订阅 SSE，按事件名回调，返回关闭函数 |
 | `ctx.toast(message, type?)` | 显示 `success`、`error` 或 `warning` 提示，默认 `success` |
 | `ctx.pageHref(id, options?)` | 生成本插件页面的 URL |
 
-路由自己返回的 `401` 或 `403` 会传给调用方；只有 WebUI 的鉴权拒绝才触发登录流程。组件创建的订阅应在 `useEffect` 的清理函数中关闭，模块卸载时也会关闭 SDK 登记的 SSE。
+多实例统一网关模式下，各实例的页面运行在 `/i/<实例名>/` 前缀下，上述接口会自动补上当前实例前缀。插件访问自定义公开路径时应使用 `ctx.url(path)` 而非写死根路径；多个实例共用同一个 origin，需要按实例隔离的浏览器缓存（`localStorage` / `sessionStorage`）应自行区分实例。路由自己返回的 `401` 或 `403` 会传给调用方；只有 WebUI 的鉴权拒绝才触发登录流程。组件创建的订阅应在 `useEffect` 的清理函数中关闭，模块卸载时也会关闭 SDK 登记的 SSE。
 
 ## 打包、样式和文件边界
 

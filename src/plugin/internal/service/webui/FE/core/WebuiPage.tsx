@@ -16,7 +16,7 @@ const themeOptions = [
 ]
 
 /** The settings page of builtin:webui, including the appearance of its shell. */
-const WebuiPage: React.FC = () => {
+const WebuiPage: React.FC<{ managerOverview?: boolean }> = ({ managerOverview = false }) => {
   const { mode, setMode } = useThemeStore()
   const [confirmLogout, setConfirmLogout] = useState(false)
 
@@ -78,10 +78,12 @@ const WebuiPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="card p-6 flex-1" aria-labelledby="webui-sidebar-heading">
-            <h3 id="webui-sidebar-heading" className="text-base font-semibold text-theme mb-4">侧边栏</h3>
-            <SidebarSettings />
-          </section>
+          {!managerOverview && (
+            <section className="card p-6 flex-1" aria-labelledby="webui-sidebar-heading">
+              <h3 id="webui-sidebar-heading" className="text-base font-semibold text-theme mb-4">侧边栏</h3>
+              <SidebarSettings />
+            </section>
+          )}
         </div>
 
         <section className="card p-6" aria-labelledby="webui-access-heading">
@@ -92,12 +94,14 @@ const WebuiPage: React.FC = () => {
         </section>
       </div>
 
-      <SlotOutlet name="settings.sections" wrap={(element, contribution) => (
-        <section className="card p-6">
-          {typeof contribution.options.title === 'string' && <h3 className="text-base font-semibold text-theme mb-4">{contribution.options.title}</h3>}
-          {element}
-        </section>
-      )} />
+      {!managerOverview && (
+        <SlotOutlet name="settings.sections" wrap={(element, contribution) => (
+          <section className="card p-6">
+            {typeof contribution.options.title === 'string' && <h3 className="text-base font-semibold text-theme mb-4">{contribution.options.title}</h3>}
+            {element}
+          </section>
+        )} />
+      )}
 
       {confirmLogout && (
         <Portal>

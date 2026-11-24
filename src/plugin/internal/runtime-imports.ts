@@ -13,15 +13,16 @@ import * as m10 from "../../main/config/index"
 import * as m11 from "../../main/config/legacyConfig"
 import * as m12 from "../../main/config/validate"
 import * as m13 from "../../main/log"
-import * as m14 from "../host/index"
-import * as m15 from "../host/manifest"
-import * as m16 from "../host/renamed"
-import * as m17 from "../host/resolve-hook"
-import * as m18 from "../host/shared-packages"
-import * as m19 from "./adapter/adapterEntry"
-import * as m20 from "./adapter/settingsTemplate"
-import * as m21 from "../../universal/fallback"
-import * as m22 from "../../version"
+import * as m14 from "../../main/manager/protocol"
+import * as m15 from "../host/index"
+import * as m16 from "../host/manifest"
+import * as m17 from "../host/renamed"
+import * as m18 from "../host/resolve-hook"
+import * as m19 from "../host/shared-packages"
+import * as m20 from "./adapter/adapterEntry"
+import * as m21 from "./adapter/settingsTemplate"
+import * as m22 from "../../universal/fallback"
+import * as m23 from "../../version"
 import { registerBuiltinRuntime } from '../host/builtin-runtime'
 registerBuiltinRuntime({
   "common/configPaths.ts": m0,
@@ -38,13 +39,14 @@ registerBuiltinRuntime({
   "main/config/legacyConfig.ts": m11,
   "main/config/validate.ts": m12,
   "main/log.ts": m13,
-  "plugin/host/index.ts": m14,
-  "plugin/host/manifest.ts": m15,
-  "plugin/host/renamed.ts": m16,
-  "plugin/host/resolve-hook.ts": m17,
-  "plugin/host/shared-packages.ts": m18,
-  "plugin/internal/adapter/adapterEntry.ts": m19,
-  "plugin/internal/adapter/settingsTemplate.ts": m20,
-  "universal/fallback.ts": m21,
-  "version.ts": m22,
+  "main/manager/protocol.ts": m14,
+  "plugin/host/index.ts": m15,
+  "plugin/host/manifest.ts": m16,
+  "plugin/host/renamed.ts": m17,
+  "plugin/host/resolve-hook.ts": m18,
+  "plugin/host/shared-packages.ts": m19,
+  "plugin/internal/adapter/adapterEntry.ts": m20,
+  "plugin/internal/adapter/settingsTemplate.ts": m21,
+  "universal/fallback.ts": m22,
+  "version.ts": m23,
 })

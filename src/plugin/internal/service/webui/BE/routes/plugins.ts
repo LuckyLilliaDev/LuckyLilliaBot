@@ -7,6 +7,7 @@ import {
   PluginConfigError, PluginForbiddenError, PluginNotFoundError, PluginRevConflictError, PluginTrustRequiredError, UiPrefsPatch,
 } from '../../../../../host'
 import { checkToken } from '../auth'
+import { behindGateway, gatewayAuthenticated } from '../gateway'
 
 export function createPluginRoutes(ctx: Context): Hono {
   const router = new Hono()
@@ -162,7 +163,10 @@ async function servePackageFile(request: Request, env: ServerEnv, resolve: Resol
   if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 })
   const { pathname } = new URL(request.url)
   const ip = env?.incoming?.socket?.remoteAddress ?? ''
-  if (checkToken(loginCookie(request), ip, request.method, pathname)) return new Response(null, { status: 401 })
+  if (behindGateway()) {
+    // The gateway checked the login against its cookie already
+    if (!gatewayAuthenticated(name => request.headers.get(name))) return new Response(null, { status: 401 })
+  } else if (checkToken(loginCookie(request), ip, request.method, pathname)) return new Response(null, { status: 401 })
   const [, , key, , ...file] = pathname.split('/')
   let target: string | undefined
   try {

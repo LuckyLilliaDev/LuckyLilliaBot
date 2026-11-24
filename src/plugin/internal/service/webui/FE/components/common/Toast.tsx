@@ -52,7 +52,7 @@ const Toast: React.FC<ToastProps> = ({ message, type = 'success', duration = 300
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 glass glass-thick r-card text-theme transition-all duration-300 ${
+      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 glass glass-thick glass-dense r-card text-theme transition-all duration-300 ${
         isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
       }`}
       style={{ minWidth: '300px', maxWidth: '520px' }}

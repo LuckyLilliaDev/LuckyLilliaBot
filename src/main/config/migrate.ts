@@ -6,7 +6,7 @@ import { DATA_DIR } from '@/common/globalVars'
 import { configPaths, INSTANCE_FILES, LEGACY_ACCOUNT_FILE, legacyPaths } from '@/common/configPaths'
 import { DEFAULT_INSTANCE, instancesDir } from '@/common/instance'
 import { JsonFile } from '@/common/jsonFile'
-import { mergeNewProperties } from '@/common/utils'
+import { mergeNewProperties } from '@/common/utils/misc'
 import { newEntryId, PluginEntry, PluginsFile } from '../../plugin/host/store'
 import { adapterDefaults } from './defaultConfig'
 import { ADAPTER_ENTRIES, ADAPTER_KEYS, templateConfig, upgradeConfig } from './upgrade'
@@ -72,12 +72,12 @@ export function migrateToInstances(log: MigrationLog) {
   if (pluginData) renameSync(pluginData, path.join(staging, DEFAULT_INSTANCE, INSTANCE_FILES.pluginData))
   renameSync(staging, instancesDir())
 
+  // data/webui_token.txt stays: it is the WebUI password of all instances under the manager (manager/auth.ts)
   const sources = new Set([
     ...accounts.flatMap(account => account.sources),
     ...(instanceWide?.sources ?? []),
     ...(email?.sources ?? []),
     ...(plugins?.sources ?? []),
-    ...(token ? [token] : []),
   ])
   // The unreleased layout goes as a whole, whatever in it was not carried over (the per-account overrides)
   const configDir = legacyPaths.configDir()
@@ -93,7 +93,7 @@ export function migrateToInstances(log: MigrationLog) {
     if (name !== DEFAULT_INSTANCE) log.info(`QQ ${name} 的配置和 ${DEFAULT_INSTANCE} 不同，单独放在实例 ${name}：用 -q ${name} 或 --instance ${name} 启动就会用它`)
   }
   log.info('登录方式沿用旧版的纯协议 · Linux，可以在 WebUI 的「NTQQ 协议」页更改')
-  log.info(`旧配置文件已改名为 *.bak：${[...sources].map(source => path.relative(DATA_DIR, source)).join('、')}`)
+  if (sources.size) log.info(`旧配置文件已改名为 *.bak：${[...sources].map(source => path.relative(DATA_DIR, source)).join('、')}`)
 }
 
 /**
@@ -436,7 +436,7 @@ function reportLeftovers(log: MigrationLog) {
   const leftovers = list(DATA_DIR)
     .filter(name => LEGACY_ACCOUNT_FILE.test(name))
     .map(name => path.join(DATA_DIR, name))
-  for (const file of [legacyPaths.email(), legacyPaths.webuiToken(), legacyPaths.configDir()]) {
+  for (const file of [legacyPaths.email(), legacyPaths.configDir()]) {
     if (existsSync(file)) leftovers.push(file)
   }
   for (const file of leftovers) {

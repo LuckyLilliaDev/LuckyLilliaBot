@@ -84,6 +84,34 @@ export function shouldShowBanner(status: CoreUpdateStatus | null, prefs: UpdateP
   return true
 }
 
+/**
+ * Non-null while a core update is actively downloading, installing, or waiting for the new version to come back.
+ * Shown persistently at the top of the WebUI regardless of which page is open or whether instances are stopped.
+ */
+export function coreUpdateProgressMessage(
+  status: CoreUpdateStatus | null,
+  target: string | null,
+  waitedTooLong = false,
+): string | null {
+  if (target) {
+    return waitedTooLong
+      ? 'Bot 重启的时间比预期长，可以稍后手动刷新页面'
+      : `正在重启到 ${target}，完成后页面会自动刷新…`
+  }
+  if (!status) return null
+  const version = status.latest
+  switch (status.state) {
+    case 'downloading':
+      return version ? `正在下载 ${version}…` : '正在下载新版本…'
+    case 'installing':
+      return version ? `正在安装 ${version}…` : '正在安装新版本…'
+    case 'restarting':
+      return version ? `正在重启到 ${version}，完成后页面会自动刷新…` : '正在重启，完成后页面会自动刷新…'
+    default:
+      return null
+  }
+}
+
 let restartTimer: ReturnType<typeof setInterval> | undefined
 
 function clearRestartTimer() {
@@ -164,16 +192,31 @@ export const useCoreUpdateStore = create<CoreUpdateStoreState>((set, get) => ({
   async startUpdate(version: string) {
     const current = get().status
     set({
-      status: current ? { ...current, state: 'downloading', error: undefined } : current,
+      status: current
+        ? { ...current, latest: version, state: 'downloading', error: undefined }
+        : { current: '', latest: version, available: true, state: 'downloading' },
       waitedTooLong: false,
       bannerError: '',
     })
+    let progressTimer: ReturnType<typeof setInterval> | undefined
+    progressTimer = setInterval(async () => {
+      try {
+        const poll = await apiFetch<CoreUpdateStatus>('/api/core-update/status')
+        if (poll.data.state !== 'idle') {
+          set({ status: { ...poll.data, latest: poll.data.latest ?? version } })
+        }
+      } catch {
+        // Ignore transient errors while update is running
+      }
+    }, 1500)
     try {
       const response = await apiFetch<CoreUpdateStatus>('/api/core-update/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ version }),
       })
+      clearInterval(progressTimer)
+      progressTimer = undefined
       set({ status: response.data, target: version, waitedTooLong: false, bannerError: '' })
       clearRestartTimer()
       const started = Date.now()
@@ -196,6 +239,7 @@ export const useCoreUpdateStore = create<CoreUpdateStoreState>((set, get) => ({
         }
       }, RESTART_POLL)
     } catch (error) {
+      if (progressTimer !== undefined) clearInterval(progressTimer)
       const message = errorText(error)
       set(state => ({
         status: state.status ? { ...state.status, state: 'idle', error: message } : state.status,

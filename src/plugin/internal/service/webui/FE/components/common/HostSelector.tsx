@@ -5,6 +5,7 @@ import { Select } from './Select'
 interface HostSelectorProps {
   value: string
   onChange: (host: string) => void
+  interfacesUrl?: string
 }
 
 let cachedNetworkInterfaces: string[] | null = null
@@ -13,7 +14,7 @@ let cachedIsDocker: boolean = false
 // No address is spelled like this, so it can stand for the custom choice in the list
 const CUSTOM = '\0custom'
 
-export const HostSelector: React.FC<HostSelectorProps> = ({ value, onChange }) => {
+export const HostSelector: React.FC<HostSelectorProps> = ({ value, onChange, interfacesUrl = '/api/network-interfaces' }) => {
   const [networkInterfaces, setNetworkInterfaces] = useState<string[]>(cachedNetworkInterfaces || [])
   const [isDocker, setIsDocker] = useState(cachedIsDocker)
   const [isCustom, setIsCustom] = useState(false)
@@ -21,7 +22,7 @@ export const HostSelector: React.FC<HostSelectorProps> = ({ value, onChange }) =
 
   useEffect(() => {
     if (!cachedNetworkInterfaces) {
-      apiFetch<string[]>('/api/network-interfaces').then(res => {
+      apiFetch<string[]>(interfacesUrl).then(res => {
         if (res.success) {
           cachedNetworkInterfaces = res.data
           cachedIsDocker = !!(res as any).isDocker

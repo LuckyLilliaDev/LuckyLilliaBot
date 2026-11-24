@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { PluginStatus } from '../../types/plugins'
 import { pluginIcon } from './meta'
+import { withBase } from '../../utils/base'
 
 interface PluginIconProps {
   plugin: Pick<PluginStatus, 'iconUrl' | 'manifest'>
@@ -18,7 +19,7 @@ interface PluginIconProps {
 const PluginIcon: React.FC<PluginIconProps> = ({ plugin, className, fill, size, muted }) => {
   // A broken image falls back to the lucide icon, until the URL changes
   const [broken, setBroken] = useState<string>()
-  const image = plugin.iconUrl && plugin.iconUrl !== broken ? plugin.iconUrl : undefined
+  const image = plugin.iconUrl && plugin.iconUrl !== broken ? withBase(plugin.iconUrl) : undefined
   if (image) {
     return (
       <div className={`flex-shrink-0 overflow-hidden fill-quiet ${className}`}>
@@ -26,7 +27,7 @@ const PluginIcon: React.FC<PluginIconProps> = ({ plugin, className, fill, size, 
           src={image}
           alt=""
           draggable={false}
-          onError={() => setBroken(image)}
+          onError={() => setBroken(plugin.iconUrl)}
           className={`w-full h-full object-cover transition-[filter,opacity] ${muted ? 'grayscale opacity-60' : ''}`}
         />
       </div>

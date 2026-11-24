@@ -34,7 +34,9 @@ function pluginSharedShims(): Plugin {
     name: 'llbot-plugin-shared-shims',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const source = files.get((req.url ?? '').split('?')[0].slice(1))
+        const clean = (req.url ?? '').split('?')[0]
+        const match = /(?:^|\/)(plugin-shared\/.+)$/.exec(clean)
+        const source = match && files.get(match[1])
         if (source === undefined) return next()
         res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
         res.end(source)
@@ -49,6 +51,8 @@ function pluginSharedShims(): Plugin {
 const backend = `http://127.0.0.1:${process.env.WEBUI_PORT || 3080}`
 
 export default defineConfig({
+  // Relative: under the instance manager's gateway the page is served at /i/<instance>/ (routes are in the hash)
+  base: './',
   build: {
     outDir: path.join(__dirname, '../../../../../../dist/webui'),
     emptyOutDir: true,
@@ -73,9 +77,13 @@ export default defineConfig({
       allow: [path.resolve(__dirname, '../../../../../..')],
     },
     proxy: {
+      '^/i/[^/]+/(api|plugin-webui|plugin-assets|face)(/|$)': {
+        target: backend,
+        changeOrigin: false,
+      },
       '/api': {
         target: backend,
-        changeOrigin: true,
+        changeOrigin: false,
       },
       // These check the login cookie, named after the port in the Host header: the browser's, so it stays
       '/plugin-webui': {

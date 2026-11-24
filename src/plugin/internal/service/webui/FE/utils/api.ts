@@ -2,6 +2,7 @@ import { ApiResponse } from '../types';
 import { showToast } from '../components/common';
 import { hashPassword } from './passwordHash';
 import { deleteCookie, getCookie, setCookie } from './cookie';
+import { withBase } from './base';
 
 const TOKEN_EXPIRY_DAYS = 30;
 /** Where versions before the per-port name kept the login. */
@@ -62,7 +63,7 @@ export async function authorizedFetch(url: string, options: RequestInit = {}): P
       headers.set('x-webui-token', authToken);
     }
 
-    return fetch(url, {
+    return fetch(withBase(url), {
       ...options,
       headers,
     });
@@ -81,7 +82,7 @@ export async function authorizedFetch(url: string, options: RequestInit = {}): P
     }
 
     // 设置密码时传的是明文
-    const setTokenResponse = await fetch('/api/set-token', {
+    const setTokenResponse = await fetch(withBase('/api/set-token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: newPassword.trim() }),

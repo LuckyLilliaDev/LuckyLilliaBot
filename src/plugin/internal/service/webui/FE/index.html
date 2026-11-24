@@ -4,15 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebUI</title>
-    <!-- Plugin WebUI modules import these; see pluginSharedShims() in vite.config.ts -->
+    <!-- Plugin WebUI modules import these; see pluginSharedShims() in vite.config.ts. Relative: under the instance
+         manager's gateway the page is served at /i/<instance>/ -->
     <script type="importmap">
       {
         "imports": {
-          "react": "/plugin-shared/react.js",
-          "react/jsx-runtime": "/plugin-shared/react-jsx-runtime.js",
-          "react-dom": "/plugin-shared/react-dom.js",
-          "@luckylillia-dev/plugin-sdk/webui": "/plugin-shared/plugin-sdk-webui.js",
-          "@luckylillia/plugin-sdk/webui": "/plugin-shared/plugin-sdk-webui.js"
+          "react": "./plugin-shared/react.js",
+          "react/jsx-runtime": "./plugin-shared/react-jsx-runtime.js",
+          "react-dom": "./plugin-shared/react-dom.js",
+          "@luckylillia-dev/plugin-sdk/webui": "./plugin-shared/plugin-sdk-webui.js",
+          "@luckylillia/plugin-sdk/webui": "./plugin-shared/plugin-sdk-webui.js"
         }
       }
     </script>

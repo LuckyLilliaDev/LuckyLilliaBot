@@ -10,6 +10,8 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { serve, ServerType } from '@hono/node-server'
 import { noop } from 'cosmokit'
 import type { FetchHandler, WebUIServer } from '@luckylillia-dev/plugin-sdk'
+import type { InstanceMessage } from '@/main/manager/protocol'
+import { behindGateway, fromGateway } from './gateway'
 
 let feDistPath = path.resolve(import.meta.dirname, 'webui/')
 // @ts-expect-error: TS2339 - Property 'env' does not exist on type 'ImportMeta'
@@ -61,6 +63,8 @@ export class WebuiServer extends Service implements WebUIServer {
     this.ctx.on('llob/config-updated', (newConfig: Config) => {
       const oldConfig = { ...this.config }
       this.setConfig(newConfig)
+      // Behind the gateway the address is the manager's, whatever the settings say
+      if (behindGateway()) return
       const forcePort = (oldConfig.port === newConfig.webui?.port) ? this.currentPort : undefined
       if (oldConfig.host != newConfig.webui?.host
         || oldConfig.enable != newConfig.webui?.enable
@@ -97,6 +101,14 @@ export class WebuiServer extends Service implements WebUIServer {
   }
 
   private initServer() {
+    // Behind the gateway: only what it forwards, with its secret. No X-Webui-Auth either, so nothing probing for
+    // the WebUI (the desktop app does) takes this port for it.
+    if (behindGateway()) {
+      this.app.use('*', async (c, next) => {
+        if (!fromGateway(name => c.req.header(name))) return c.text('Forbidden', 403)
+        await next()
+      })
+    }
     this.app.use('/api/*', authMiddleware)
 
     this.app.route('/api', createConfigRoutes(this.ctx))
@@ -116,11 +128,16 @@ export class WebuiServer extends Service implements WebUIServer {
       await next()
     })
 
-    this.app.use('/*', serveStatic({ root: feDistPath }))
+    const readIndexHtml = () => readFile(path.join(feDistPath, 'index.html'), 'utf8')
     this.app.get('/', async (c) => {
-      const filePath = path.join(feDistPath, 'index.html')
-      return c.html((await readFile(filePath)).toString())
+      c.header('Cache-Control', 'no-store')
+      return c.html(await readIndexHtml())
     })
+    this.app.get('/index.html', async (c) => {
+      c.header('Cache-Control', 'no-store')
+      return c.html(await readIndexHtml())
+    })
+    this.app.use('/*', serveStatic({ root: feDistPath }))
   }
 
   private getHostPort(): { host: string; port: number } {
@@ -128,18 +145,28 @@ export class WebuiServer extends Service implements WebUIServer {
   }
 
   private async startServer(forcePort?: number) {
-    const { host, port } = this.getHostPort()
-    const targetPort = forcePort !== undefined ? forcePort : await getAvailablePort(port)
-    this.server = serve({
-      fetch: this.app.fetch,
-      port: targetPort,
-      hostname: host
-    }, () => {
-      this.currentPort = targetPort
-      const displayHost = host || '0.0.0.0'
-      this.ctx.logger.info(`Webui 服务器已启动 ${displayHost}:${targetPort}`)
+    const gateway = behindGateway()
+    const { host, port } = gateway ? { host: '127.0.0.1', port: 0 } : this.getHostPort()
+    const targetPort = gateway ? 0 : forcePort !== undefined ? forcePort : await getAvailablePort(port)
+    return new Promise<number>((resolve, reject) => {
+      this.server = serve({
+        fetch: this.app.fetch,
+        port: targetPort,
+        hostname: host
+      }, (info) => {
+        this.currentPort = info.port
+        if (gateway) {
+          // The manager routes this instance's requests here from now on
+          process.send?.({ type: 'webui', port: info.port } satisfies InstanceMessage)
+          this.ctx.logger.info(`实例 WebUI 已就绪（内部端口 127.0.0.1:${info.port}，通过管理器的 WebUI 地址访问）`)
+        } else {
+          const displayHost = host || '0.0.0.0'
+          this.ctx.logger.info(`Webui 服务器已启动 ${displayHost}:${info.port}`)
+        }
+        resolve(info.port)
+      })
+      this.server.once('error', reject)
     })
-    return targetPort
   }
 
   stop() {
@@ -172,14 +199,14 @@ export class WebuiServer extends Service implements WebUIServer {
   }
 
   async start() {
-    if (!this.config?.enable) {
+    if (!this.config?.enable && !behindGateway()) {
       return
     }
     this.port = await this.startServer()
   }
 
   private async startWithPort(forcePort?: number): Promise<void> {
-    if (!this.config?.enable) {
+    if (!this.config?.enable && !behindGateway()) {
       return
     }
     this.port = await this.startServer(forcePort)

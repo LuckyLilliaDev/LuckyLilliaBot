@@ -72,8 +72,9 @@ export default defineConfig({
     rolldownOptions: {
       platform: 'node',
       external: [...external, '@luckylillia-dev/plugin-sdk', ...builtinModules, /^node:/],
-      // llbot.js is the small supervisor every launcher runs; it runs the bot, llbot-core.js, as a child
-      input: { llbot: 'src/main/llbot.ts', 'llbot-core': 'src/main/main.ts' },
+      // llbot.js is the small supervisor every launcher runs; it runs the instance manager, llbot-manager.js, which
+      // runs each instance, llbot-core.js, as a child
+      input: { llbot: 'src/main/llbot.ts', 'llbot-manager': 'src/main/manager/index.ts', 'llbot-core': 'src/main/main.ts' },
       output: {
         entryFileNames: '[name].js',
         chunkFileNames: 'chunks/[name]-[hash].js',

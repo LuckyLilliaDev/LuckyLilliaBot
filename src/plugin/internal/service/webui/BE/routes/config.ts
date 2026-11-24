@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { webuiTokenUtil } from '../../../../../../main/config'
 import { applyLegacyConfig } from '../../../../../../main/config/legacyConfig'
 import { PluginConfigError, PluginTrustRequiredError } from '../../../../../host'
+import { behindGateway } from '../gateway'
 
 export function createConfigRoutes(ctx: Context): Hono {
   const router = new Hono()
@@ -33,6 +34,9 @@ export function createConfigRoutes(ctx: Context): Hono {
   })
 
   router.post('/set-token', async (c) => {
+    if (behindGateway()) {
+      return c.json({ success: false, message: '密码由实例管理器统一管理' }, 403)
+    }
     const { token } = await c.req.json()
     if (!token) {
       return c.json({ success: false, message: 'Token不能为空' }, 400)

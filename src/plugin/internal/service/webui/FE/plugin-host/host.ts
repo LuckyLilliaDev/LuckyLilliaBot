@@ -7,6 +7,7 @@ import { createWebUIContext } from './context'
 import { clearFailuresOf } from './failures'
 import { followPluginList, usePluginList } from './pluginList'
 import { PageContribution, useRegistry } from './registry'
+import { withBase } from '../utils/base'
 
 /** Why a plugin's WebUI module did not load, by package name. */
 export const useClientErrors = create<{ errors: Record<string, string> }>(() => ({ errors: {} }))
@@ -62,7 +63,7 @@ export function ensureClient(owner: string, url: string): Promise<void> {
   if (!task) {
     task = (async () => {
       try {
-        const module = await import(/* @vite-ignore */ url)
+        const module = await import(/* @vite-ignore */ withBase(url))
         const apply = module.default ?? module.apply
         if (typeof apply !== 'function') throw new Error('模块没有默认导出一个函数')
         // The previous version stays until the new one imported fine
