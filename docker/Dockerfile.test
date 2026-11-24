@@ -2,11 +2,13 @@ FROM node:24-alpine
 
 RUN set -eux; \
     sed -i 's|dl-cdn.alpinelinux.org|mirrors.ustc.edu.cn|g' /etc/apk/repositories; \
-    apk add --no-cache ffmpeg tzdata; \
+    apk add --no-cache tzdata; \
     ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \
     echo "Asia/Shanghai" > /etc/timezone
 
 ENV TZ=Asia/Shanghai
+# The bot installs its own updates into the data volume when it knows it runs in a container (src/main/runtime.ts)
+ENV LLBOT_CONTAINER=1
 
 WORKDIR /app/llbot
 
@@ -17,8 +19,6 @@ RUN touch /.dockerenv
 
 COPY dist/ .
 
-# alpine 只加载 musl 变体, 删掉其它平台/ABI 的 sign-proxy .node (darwin/win/glibc) 瘦身
-RUN for f in sign-proxy.*.node; do case "$f" in *-musl.node) ;; *) rm -f "$f" ;; esac; done
 
 VOLUME ["/app/llbot/data"]
 

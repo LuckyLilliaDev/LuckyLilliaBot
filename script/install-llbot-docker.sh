@@ -23,14 +23,14 @@ while [ -z "$AUTO_LOGIN_QQ" ]; do
     [[ "$AUTO_LOGIN_QQ" =~ ^[0-9]+$ ]] || { echo "错误：QQ 号必须是数字！"; AUTO_LOGIN_QQ=""; continue; }
 done
 
-# 连接模式: direct=无头, 纯代码复刻协议(省内存); pmhq=有头, QQ 客户端跑在独立 pmhq 容器(更稳)
+# 连接模式: direct=无头, 纯代码复刻协议(省内存); nativeqq=有头, 官方 QQ 客户端和 Bot 在同一个容器, 由 NativeQQ 桥接
 PROTOCOL_MODE="direct"
 echo ""
 echo "连接模式："
 echo "1) 无头（纯协议，省内存）"
-echo "2) 有头（需 QQ 客户端容器）"
+echo "2) 有头（需包含 QQ 与 LLBot 的原生镜像）"
 read -p "请选择 (默认 1): " mode_choice
-[ "$mode_choice" == "2" ] && PROTOCOL_MODE="pmhq"
+[ "$mode_choice" == "2" ] && PROTOCOL_MODE="nativeqq"
 
 echo ""
 echo "请选择配置方式："
@@ -209,11 +209,11 @@ if [ ${#OB11_CONNECTS[@]} -gt 0 ]; then
     OB11_CONNECT_JSON+="]"
 fi
 
-# 创建配置文件
 mkdir -p llbot_config
 
 # 仅在完整配置模式下生成配置文件
 if [ "$config_mode" == "1" ]; then
+    # 旧式的 config_<uin>.json, Bot 启动时会迁进 data/instances/ (见 docs/config-storage.md §9), 原文件改名 .bak
     cat > "llbot_config/config_${AUTO_LOGIN_QQ}.json" << EOF
 {
   "milky": {
@@ -251,16 +251,12 @@ EOF
     echo "配置文件已生成: llbot_config/config_${AUTO_LOGIN_QQ}.json"
 fi
 
-# 创建 webui_token.txt
 echo "$WEBUI_TOKEN" > "llbot_config/webui_token.txt"
 echo "WebUI 密码文件已生成: llbot_config/webui_token.txt"
 
-# 创建 auth_token.txt (Bot 读 data/auth_token.txt 做 sign 鉴权)
-# PMHQ 模式的 auth token 走 pmhq 容器的 PMHQ_AUTH_TOKEN env, 不落文件
-if [ "$PROTOCOL_MODE" != "pmhq" ]; then
-    echo "$AUTH_TOKEN" > "llbot_config/auth_token.txt"
-    echo "Auth Token 文件已生成: llbot_config/auth_token.txt"
-fi
+# Both modes share the same instance-owned authorization watcher.
+echo "$AUTH_TOKEN" > "llbot_config/auth_token.txt"
+echo "Auth Token 文件已生成: llbot_config/auth_token.txt"
 
 # 设置配置目录权限，确保 Docker 容器可以读写
 chmod -R 777 llbot_config
@@ -270,9 +266,7 @@ read -p "是否使用 Docker 镜像源 (y/n): " use_docker_mirror
 
 docker_mirror=""
 LLBOT_TAG="latest"
-PMHQ_TAG="latest"
 
-# 从 npm registry 获取版本号
 get_npm_version() {
   local package=$1
   local version=$(curl -s --connect-timeout 5 "https://registry.npmjs.org/${package}/latest" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
@@ -295,24 +289,11 @@ else
   LLBOT_TAG="latest"
 fi
 
-# PMHQ 有头模式需要额外的 pmhq 镜像
-if [ "$PROTOCOL_MODE" == "pmhq" ]; then
-  PMHQ_TAG=$(get_npm_version "pmhq-dist-win-x64")
-  if [ -n "$PMHQ_TAG" ]; then
-    echo "PMHQ 最新版本: $PMHQ_TAG"
-  else
-    echo "无法获取 PMHQ 版本，将使用 latest"
-    PMHQ_TAG="latest"
-  fi
-fi
-
 if [[ "$use_docker_mirror" =~ ^[yY]$ ]]; then
-  # Docker 镜像源列表
   DOCKER_MIRRORS=(
     "docker.gh-proxy.cn"
   )
 
-  # 测试镜像源是否可用
   test_mirror() {
     local mirror=$1
     local image=$2
@@ -324,16 +305,12 @@ if [[ "$use_docker_mirror" =~ ^[yY]$ ]]; then
     return 1
   }
 
-  # 查找可用的镜像源（pmhq 模式需要 llbot + pmhq 两个镜像都可用）
+  # direct 模式使用标准 Bot 镜像；NativeQQ 模式稍后指定包含 QQ 的镜像
   find_available_mirror() {
     local llbot_tag=$1
 
     for mirror in "${DOCKER_MIRRORS[@]}"; do
       if test_mirror "$mirror" "llbot" "$llbot_tag"; then
-        if [ "$PROTOCOL_MODE" == "pmhq" ] && ! test_mirror "$mirror" "pmhq" "$PMHQ_TAG"; then
-          echo "镜像源 ${mirror} 缺少 pmhq 镜像" >&2
-          continue
-        fi
         echo "找到可用镜像源: ${mirror}" >&2
         echo "${mirror}/"
         return 0
@@ -344,8 +321,7 @@ if [[ "$use_docker_mirror" =~ ^[yY]$ ]]; then
     echo "所有镜像源均不可用或不支持该版本" >&2
     echo "将回退到 Docker 官方源使用 latest 标签" >&2
     LLBOT_TAG="latest"
-    PMHQ_TAG="latest"
-    echo ""
+        echo ""
     return 1
   }
 
@@ -354,7 +330,6 @@ if [[ "$use_docker_mirror" =~ ^[yY]$ ]]; then
   docker_mirror=$(find_available_mirror "$LLBOT_TAG")
 fi
 
-# 生成 ports 配置
 PORTS_CONFIG=""
 if [ ${#SERVICE_PORTS[@]} -gt 0 ]; then
     PORTS_CONFIG="    ports:"
@@ -374,55 +349,29 @@ LLBOT_HEALTHCHECK="    healthcheck:
       retries: 3
       start_period: 40s"
 
-if [ "$PROTOCOL_MODE" == "pmhq" ]; then
-    # PMHQ 有头模式: QQ 客户端跑在独立 pmhq 容器, 账号登录由 pmhq 的 AUTO_LOGIN_QQ 处理,
-    # llbot 侧不传 QQ (session 在 pmhq 的 qq_volume 里, 不在 llbot data)
-    LLBOT_ENV="      - WEBUI_PORT=${WEBUI_PORT}
-      - PROTOCOL_MODE=pmhq
-      - PMHQ_HOST=pmhq"
-
+if [ "$PROTOCOL_MODE" == "nativeqq" ]; then
+    read -p "NativeQQ 镜像（按 docker/Dockerfile.nativeqq 构建，需包含 QQ）: " NATIVE_QQ_IMAGE
+    [ -n "$NATIVE_QQ_IMAGE" ] || { echo "必须提供包含 QQ 和 LLBot 的镜像"; exit 1; }
+    cat > llbot_config/nativeqq_config.json << EOF
+{"qq_path":"/opt/QQ/qq","quick_login_qq":"${AUTO_LOGIN_QQ}","hook_mode":"inline","qq_args":"--no-sandbox","work_dir":"/app/llbot/data"}
+EOF
     cat << EOF > docker-compose.yml
 services:
-  pmhq:
-    image: ${docker_mirror}linyuchen/pmhq:${PMHQ_TAG}
-    privileged: true
-    environment:
-      - AUTO_LOGIN_QQ=${AUTO_LOGIN_QQ}
-      - PMHQ_AUTH_TOKEN=${AUTH_TOKEN}
-    volumes:
-      - qq_volume:/root/.config/QQ
-    networks:
-      - app_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:13000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   llbot:
-    image: ${docker_mirror}linyuchen/llbot:${LLBOT_TAG}
+    image: ${NATIVE_QQ_IMAGE}
+    init: true
+    stop_grace_period: 30s
 ${PORTS_CONFIG}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
-${LLBOT_ENV}
-    networks:
-      - app_network
+      - WEBUI_PORT=${WEBUI_PORT}
+      - PROTOCOL_MODE=nativeqq
     volumes:
       - ./llbot_config:/app/llbot/data:rw
-    depends_on:
-      - pmhq
+      - qq_volume:/root/.config/QQ
     restart: unless-stopped
 ${LLBOT_HEALTHCHECK}
-
 volumes:
   qq_volume:
-
-networks:
-  app_network:
-    driver: bridge
 EOF
 else
     LLBOT_ENV="      - WEBUI_PORT=${WEBUI_PORT}
@@ -459,16 +408,14 @@ printLogin(){
         echo "  - llbot_config/config_${AUTO_LOGIN_QQ}.json"
     fi
     echo "  - llbot_config/webui_token.txt"
-    if [ "$PROTOCOL_MODE" != "pmhq" ]; then
-        echo "  - llbot_config/auth_token.txt"
-    fi
+    echo "  - llbot_config/auth_token.txt"
     echo "  - docker-compose.yml"
     echo ""
     echo "WebUI 访问地址: http://localhost:${WEBUI_PORT}"
     echo "WebUI 密码: ${WEBUI_TOKEN}"
     echo ""
-    if [ "$PROTOCOL_MODE" == "pmhq" ]; then
-        echo "连接模式: 有头 (QQ 客户端跑在 pmhq 容器内)"
+    if [ "$PROTOCOL_MODE" == "nativeqq" ]; then
+        echo "连接模式: 有头 (QQ 和 Bot 在同一个原生宿主容器内)"
         echo ""
     fi
     echo "登录方式: 启动后打开 WebUI 扫码登录，"

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestApp } from '../helpers/testApp'
 import { createMockContext } from '../helpers/mockContext'
-import { createConfigRoutes } from '@/webui/BE/routes/config'
+import { createConfigRoutes } from '@/plugin/internal/service/webui/BE/routes/config'
+import { PluginConfigError } from '@/plugin/host'
+import { ADAPTER_ENTRIES } from '@/main/config/upgrade'
 
 vi.mock('@/main/config', () => ({
   webuiTokenUtil: {
@@ -65,80 +67,99 @@ describe('config routes', () => {
   })
 
   describe('GET /config', () => {
-    it('returns current config and selfInfo', async () => {
+    it('returns the bot settings and nothing about the account', async () => {
       const app = createTestApp(createConfigRoutes(ctx))
       const res = await app.request('/config')
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.success).toBe(true)
-      expect(body.data.selfInfo).toBeDefined()
       expect(body.data.config).toBeDefined()
+      expect(body.data.selfInfo).toBeUndefined()
     })
   })
 
   describe('POST /config', () => {
-    it('saves config successfully', async () => {
-      const app = createTestApp(createConfigRoutes(ctx))
-      const res = await app.request('/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config: { ob11: { enable: false, connect: [] } } }),
-      })
+    const post = (config: object) => createTestApp(createConfigRoutes(ctx)).request('/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config }),
+    })
+    // The Satori adapter's entry, switched off, the way the plugin service reports it
+    let plugins: Record<string, ReturnType<typeof vi.fn>>
+    const calls: string[] = []
+
+    beforeEach(() => {
+      calls.length = 0
+      plugins = {
+        entrySettings: vi.fn((name: string) => name === 'builtin:satori'
+          ? { id: 'sat', enabled: false, trusted: true, config: { host: '127.0.0.1', port: 5600, token: '' } }
+          : undefined),
+        updateConfig: vi.fn(async () => { calls.push('update') }),
+        enable: vi.fn(async () => { calls.push('enable') }),
+        disable: vi.fn(async () => { calls.push('disable') }),
+      }
+      ctx.plugins = plugins
+    })
+
+    it('saves the bot settings', async () => {
+      const res = await post({ log: false })
       expect(res.status).toBe(200)
-      const body = await res.json()
-      expect(body.success).toBe(true)
+      expect(ctx.config.patch).toHaveBeenCalledWith({ log: false })
       expect(ctx.parallel).toHaveBeenCalled()
     })
 
-    it('returns 400 when Satori listens on 0.0.0.0 without token', async () => {
-      const app = createTestApp(createConfigRoutes(ctx))
-      const res = await app.request('/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          config: {
-            satori: { enable: true, host: '0.0.0.0', token: '' },
-          },
-        }),
-      })
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.message).toContain('Satori')
+    it('hands an adapter section to its plugin entry, merged per key, then switches it on', async () => {
+      const res = await post({ satori: { enable: true, port: 5700 }, log: false })
+      expect(res.status).toBe(200)
+      expect(plugins.updateConfig).toHaveBeenCalledWith('sat', { host: '127.0.0.1', port: 5700, token: '' }, undefined, [], {})
+      expect(calls).toEqual(['update', 'enable'])
+      // the section does not end up in the settings file
+      expect(ctx.config.patch).toHaveBeenCalledWith({ log: false })
     })
 
-    it('returns 400 when OB11 WS listens on 0.0.0.0 without token', async () => {
-      const app = createTestApp(createConfigRoutes(ctx))
-      const res = await app.request('/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          config: {
-            ob11: {
-              enable: true,
-              connect: [{ enable: true, type: 'ws', host: '0.0.0.0', token: '' }],
-            },
-          },
-        }),
-      })
-      expect(res.status).toBe(400)
-      const body = await res.json()
-      expect(body.message).toContain('OneBot11')
+    it('switches an adapter off before changing it', async () => {
+      plugins.entrySettings.mockReturnValue({ id: 'sat', enabled: true, trusted: true, config: { host: '', port: 5600, token: 'abc' } })
+      await post({ satori: { enable: false, token: '' } })
+      expect(calls).toEqual(['disable', 'update'])
     })
 
-    it('returns 400 when Milky HTTP listens on all interfaces without token', async () => {
-      const app = createTestApp(createConfigRoutes(ctx))
-      const res = await app.request('/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          config: {
-            milky: { enable: true, http: { host: '', accessToken: '' } },
-          },
-        }),
-      })
+    it('answers 400 with the reason when the plugin refuses the section', async () => {
+      plugins.updateConfig.mockRejectedValue(new PluginConfigError([{ path: ['token'], message: 'Satori 监听全部地址时必须设置 Token' }]))
+      const res = await post({ satori: { host: '' }, log: false })
       expect(res.status).toBe(400)
+      expect((await res.json()).message).toContain('Satori')
+      expect(ctx.config.patch).not.toHaveBeenCalled()
+    })
+
+    it('updates an installed external adapter through the legacy section', async () => {
+      plugins.entrySettings.mockImplementation((name: string) => name === ADAPTER_ENTRIES.milky
+        ? { id: 'milk', enabled: false, trusted: true, config: { http: { host: '127.0.0.1', port: 3010, accessToken: 'retained' } } }
+        : undefined)
+      const res = await post({ milky: { enable: true, http: { port: 3011 } } })
+      expect(res.status).toBe(200)
+      expect(plugins.updateConfig).toHaveBeenCalledWith('milk', { http: { host: '127.0.0.1', port: 3011, accessToken: 'retained' } }, undefined, [], {})
+      expect(plugins.enable).toHaveBeenCalledWith('milk', {})
+      expect(ctx.config.patch).not.toHaveBeenCalled()
+    })
+
+    it('requires explicit trust before changing an external adapter', async () => {
+      plugins.entrySettings.mockImplementation((name: string) => name === ADAPTER_ENTRIES.ob11
+        ? { id: 'ob', enabled: false, trusted: false, config: { connect: [] } }
+        : undefined)
+      const res = await post({ ob11: { enable: true, connect: [] } })
+      expect(res.status).toBe(428)
+      expect(await res.json()).toMatchObject({ success: false, data: { package: ADAPTER_ENTRIES.ob11 } })
+      expect(calls).toEqual([])
+      expect(ctx.config.patch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('GET /config', () => {
+    it('reports the fields an environment variable pins', async () => {
+      ctx.config.envLocks.mockReturnValue([{ path: 'webui.port', env: 'LLBOT_WEBUI_PORT' }])
+      const res = await createTestApp(createConfigRoutes(ctx)).request('/config')
       const body = await res.json()
-      expect(body.message).toContain('Milky')
+      expect(body.data.envLocked).toEqual([{ path: 'webui.port', env: 'LLBOT_WEBUI_PORT' }])
     })
   })
 })

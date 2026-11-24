@@ -5,7 +5,6 @@ vi.mock('@/common/globalVars', () => ({
   TEMP_DIR: '/tmp/test-data/temp',
   LOG_DIR: '/tmp/test-data/logs',
   dbDir: '/tmp/test-data/database',
-  selfInfo: { uid: 'test-uid', uin: '123456', nick: 'TestBot', online: true },
   getFixedDataDir: vi.fn(() => '/tmp/test-fixed'),
 }))
 
@@ -25,29 +24,28 @@ vi.mock('@/main/config', () => ({
   })),
 }))
 
-vi.mock('@/ntqqapi/native/pmhq', () => ({
-  pmhq: {
-    getProcessInfo: vi.fn(() => Promise.resolve({
-      memory: { rss: 100000000, totalMem: 8000000000 },
-      cpu: { percent: 5.0 },
-    })),
-    tellPort: vi.fn(() => Promise.resolve()),
-    getMultiMsg: vi.fn(() => Promise.resolve([])),
-  },
-}))
-
 vi.mock('@/main/log', () => ({
   getLogCache: vi.fn(() => []),
 }))
 
-// getProtocol/getCdn/isDevMode 少了会让 direct-lib 在 import 期就炸 (appInfo -> getActiveProfile 直接读; sign-proxy / config 顶层读 isDevMode)
+// getProtocol/getCdn/isDevMode 少了会让 direct-lib 在 import 期就炸 (appInfo -> getActiveProfile 直接读; native / config 读取 isDevMode)
 vi.mock('@/common/utils/environment', () => ({
   isDockerEnvironment: vi.fn(() => false),
-  isPmhqMode: vi.fn(() => false),
-  getPmhqTarget: vi.fn(() => null),
+  isNativeQQMode: vi.fn(() => false),
+  getNativeQQTarget: vi.fn(() => null),
+  currentNativeQQTarget: vi.fn(() => ({ configPath: '', qqPath: '' })),
+  protocolPins: vi.fn(() => ({})),
+  launchPins: vi.fn(() => ({})),
+  resolveProtocolSelection: vi.fn((settings: unknown) => settings),
+  setProtocolSelection: vi.fn(),
+  lockProtocol: vi.fn(),
+  lockedProtocol: vi.fn(() => undefined),
   isDevMode: vi.fn(() => false),
   getProtocol: vi.fn(() => 'linux'),
   getCdn: vi.fn(() => 'cf'),
   getAuthTokenPageUrl: vi.fn(() => 'https://auth.luckylillia.com'),
   getSpecifiedUin: vi.fn(() => undefined),
+  getPluginDirs: vi.fn(() => []),
+  isPluginHmr: vi.fn(() => false),
+  getInstanceArg: vi.fn(() => undefined),
 }))

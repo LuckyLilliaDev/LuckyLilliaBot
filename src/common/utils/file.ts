@@ -4,13 +4,12 @@ import fsPromise from 'node:fs/promises'
 import path from 'node:path'
 import * as fileType from 'file-type'
 import { imageSizeFromFile } from '../image-size/lib/fromFile'
-import { selfInfo, TEMP_DIR } from '../globalVars'
+import { TEMP_DIR } from '../globalVars'
 import { randomUUID, createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { Context } from 'cordis'
-import { ChatType, ElementType } from '@/ntqqapi/types'
+import { ChatType, ElementType } from '@/ntqq/api'
 
-// 定义一个异步函数来检查文件是否存在
 export function checkFileReceived(path: string, timeout: number = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now()
@@ -199,7 +198,7 @@ export async function uri2local(ctx: Context, uri: string, needExt?: boolean, fi
       } else if (fileCache[0].elementType === ElementType.Ptt) {
         url = await ctx.ntFileApi.getPttUrl(fileCache[0].fileUuid, isGroup)
       } else if (fileCache[0].elementType === ElementType.File) {
-        url = (await ctx.ntFileApi.getFileUrl(fileCache[0].fileUuid, isGroup, isGroup ? fileCache[0].peerUid : selfInfo.uid)).url
+        url = (await ctx.ntFileApi.getFileUrl(fileCache[0].fileUuid, isGroup, isGroup ? fileCache[0].peerUid : ctx.qqProtocol.selfInfo.uid)).url
       }
       if (url) {
         return await uri2local(ctx, url, needExt, fileName)
@@ -440,7 +439,6 @@ export class Sha1Stream {
     const st = this._state
 
     if (bigEnding) {
-      // big endian
       out[0] = st[0] >>> 24
       out[1] = (st[0] >>> 16) & 0xff
       out[2] = (st[0] >>> 8) & 0xff
@@ -466,7 +464,6 @@ export class Sha1Stream {
       out[18] = (st[4] >>> 8) & 0xff
       out[19] = st[4] & 0xff
     } else {
-      // little endian
       out[0] = st[0] & 0xff
       out[1] = (st[0] >>> 8) & 0xff
       out[2] = (st[0] >>> 16) & 0xff
@@ -586,12 +583,10 @@ export class TriSha1 {
     this.fileSize = fileSize
 
     if (fileSize < 30 * 1024 * 1024) {
-      // < 30M
       this.ranges = [[0, fileSize]]
     } else {
-      // >= 30M
       this.ranges = [
-        [0, 10 * 1024 * 1024 - 1], // 0..10485759
+        [0, 10 * 1024 * 1024 - 1],
         [
           (fileSize >> 1) - 5 * 1024 * 1024,
           (fileSize >> 1) + 5 * 1024 * 1024 - 1

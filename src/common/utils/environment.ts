@@ -8,56 +8,147 @@ export function isDockerEnvironment(): boolean {
     }
 }
 
-/**
- * 解析 PMHQ 连接目标, 返 null = 没传 --pmhq-port = 直连模式。
- * 空格和等号两种写法都认 (跟 --qq 对齐):
- *   --pmhq-port <port> / --pmhq-port=<port> / --pmhq-host <host> / --pmhq-host=<host>
- * 只要出现过 --pmhq-port 就算 PMHQ 模式, 没给值就用默认端口 -- 绝不因为写法不对静默退回直连
- * (那样会一路扫码连上 msfwifi 才发现跑的是直连)。
- */
-export function getPmhqTarget(argv: string[] = process.argv): { host: string; port: string } | null {
-    let requested = false
-    let port = '13000'
-    let host = '127.0.0.1'
-    for (let i = 0; i < argv.length; i++) {
-        const a = argv[i]
-        // 值不能是下一个 flag: `--pmhq-port --dev` 不该把 "--dev" 当端口
-        const next = argv[i + 1] && !argv[i + 1].startsWith('-') ? argv[i + 1] : undefined
-        if (a === '--pmhq-port') {
-            requested = true
-            if (next) port = next
-        } else if (a.startsWith('--pmhq-port=')) {
-            requested = true
-            const v = a.slice('--pmhq-port='.length)
-            if (v) port = v
-        } else if (a === '--pmhq-host') {
-            if (next) host = next
-        } else if (a.startsWith('--pmhq-host=')) {
-            const v = a.slice('--pmhq-host='.length)
-            if (v) host = v
-        }
+/** What the bridge runs: a NativeQQ configuration file, which only the launch gives, and the QQ to start */
+export interface NativeQQTarget {
+    configPath: string
+    qqPath: string
+}
+
+/** `--nativeqq`, `--nativeqq-config <file>` and `--qq-path <QQ>`: the official QQ client bridge, run in this process */
+export function getNativeQQTarget(argv: string[] = process.argv): NativeQQTarget | null {
+    const arg = (name: string) => {
+        const equals = argv.find(a => a.startsWith(name + '='))
+        if (equals) return equals.slice(name.length + 1)
+        const index = argv.indexOf(name)
+        return index >= 0 && argv[index + 1] && !argv[index + 1].startsWith('-') ? argv[index + 1] : ''
     }
-    return requested ? { host, port } : null
+    const configPath = arg('--nativeqq-config')
+    return argv.includes('--nativeqq') || !!configPath ? { configPath, qqPath: arg('--qq-path') } : null
 }
 
-/** PMHQ 模式必须传 --pmhq-port (CLI/Desktop/docker 启动脚本都会带), 以此区分直连模式 */
-export function isPmhqMode(): boolean {
-    return getPmhqTarget() !== null
+export type ProtocolMode = 'direct' | 'nativeqq'
+
+/** How the NT protocol plugin logs in: the pure protocol speaking `protocol`, or NativeQQ bridging an official QQ client. */
+export interface ProtocolSelection {
+    mode: ProtocolMode
+    protocol: ProtocolId
+    nativeQQ: NativeQQTarget
+}
+
+/** What the NT protocol plugin saves of it */
+export type ProtocolSettings = Omit<ProtocolSelection, 'nativeQQ'> & { nativeQQ: { qqPath: string } }
+
+/**
+ * What the launch fixes, and by what (a flag or an environment variable), so the WebUI shows it read-only instead of
+ * saving what would not apply.
+ */
+export interface ProtocolPins {
+    mode?: { value: ProtocolMode; by: string }
+    protocol?: { value: ProtocolId; by: string }
+    nativeQQ?: { value: NativeQQTarget; by: string }
+}
+
+let selection: ProtocolSelection | undefined
+let locked: ProtocolId | undefined
+let launch: ProtocolPins | undefined
+
+export function protocolPins(argv: string[] = process.argv, env: NodeJS.ProcessEnv = process.env): ProtocolPins {
+    const pins: ProtocolPins = {}
+    const target = getNativeQQTarget(argv)
+    if (target) {
+        pins.mode = { value: 'nativeqq', by: '--nativeqq' }
+        pins.nativeQQ = { value: target, by: '--nativeqq' }
+    } else if (argv.includes('--direct')) {
+        // Where there is no QQ to bridge: the docker image without it, the Linux script's headless mode
+        pins.mode = { value: 'direct', by: '--direct' }
+    }
+    const protocol = pinnedProtocol(argv, env)
+    if (protocol) pins.protocol = protocol
+    return pins
+}
+
+/** protocolPins() of this process, read once: getProtocol() runs for every packet, and argv does not change. */
+export function launchPins(): ProtocolPins {
+    return launch ??= protocolPins()
+}
+
+/** The NT protocol plugin's settings, with what the launch fixes winning. */
+export function resolveProtocolSelection(settings: ProtocolSettings, pins: ProtocolPins = launchPins()): ProtocolSelection {
+    return {
+        mode: pins.mode?.value ?? settings.mode,
+        protocol: pins.protocol?.value ?? settings.protocol,
+        nativeQQ: pins.nativeQQ?.value ?? { configPath: '', qqPath: settings.nativeQQ.qqPath },
+    }
+}
+
+/** Set by the NT protocol plugin before it mounts the protocol; until then the launch arguments decide. */
+export function setProtocolSelection(value: ProtocolSelection) {
+    selection = value
 }
 
 /**
- * `--dev`: run against a local manager -- loads the dev sign-proxy build and reads data/auth_token.dev.txt.
+ * Called as the pure protocol's client is created: the client lives as long as the process (native sign binds
+ * its relay to it), and so does the protocol it speaks.
+ */
+export function lockProtocol() {
+    locked ??= getProtocol()
+}
+
+/** What the pure protocol is locked to until LLBot restarts; undefined while it has no client. */
+export function lockedProtocol(): ProtocolId | undefined {
+    return locked
+}
+
+export function isNativeQQMode(): boolean {
+    return selection ? selection.mode === 'nativeqq' : getNativeQQTarget() !== null
+}
+
+export function currentNativeQQTarget(): NativeQQTarget {
+    return selection?.nativeQQ ?? getNativeQQTarget() ?? { configPath: '', qqPath: '' }
+}
+
+/**
+ * `--dev`: run against a local manager -- loads the development native bundle and reads data/auth_token.dev.txt.
  * argv only, no env fallback: a stray variable on a deployment must never switch it on.
  */
 export function isDevMode(argv: string[] = process.argv): boolean {
     return argv.includes('--dev')
 }
 
+/** Extra plugin roots besides data/plugins: `--plugin-dir <path>`, repeatable. */
+export function getPluginDirs(argv: string[] = process.argv): string[] {
+    const dirs: string[] = []
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i]
+        const next = argv[i + 1] && !argv[i + 1].startsWith('-') ? argv[i + 1] : undefined
+        if (a === '--plugin-dir') {
+            if (next) dirs.push(next)
+        } else if (a.startsWith('--plugin-dir=')) {
+            const v = a.slice('--plugin-dir='.length)
+            if (v) dirs.push(v)
+        }
+    }
+    return dirs
+}
+
+/** `--instance <name>` / `--instance=<name>`, else `LLBOT_INSTANCE`. Resolved against data/ in common/instance.ts. */
+export function getInstanceArg(argv: string[] = process.argv, env: NodeJS.ProcessEnv = process.env): string | undefined {
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i]
+        if (a === '--instance' && argv[i + 1] && !argv[i + 1].startsWith('-')) return argv[i + 1]
+        if (a.startsWith('--instance=')) return a.slice('--instance='.length) || undefined
+    }
+    return env.LLBOT_INSTANCE || undefined
+}
+
+/** `--plugin-hmr`: watch the plugin roots and hot-reload a package when its files change. */
+export function isPluginHmr(argv: string[] = process.argv): boolean {
+    return argv.includes('--plugin-hmr')
+}
+
 /**
- * 从 process.argv 里解析指定 uin. 支持 4 种写法:
- *   -q <uin> / -q=<uin> / --qq <uin> / --qq=<uin>
- * 用于多账号场景: 指定一个 uin 后会读写对应的 qq-session-<uin>[-<protocol>].json / config_<uin>.json。
- * 纯 argv 解析, 无依赖 (config service 也要用, 不能牵扯 native-sign 依赖链)。
+ * `-q <uin>` / `--qq <uin>`: 用 qq-session-<uin>[-<protocol>].json; 没给 --instance 时有同名实例就用它。
+ * 只解析 argv: config service 也用它, 不能牵扯 native-sign 依赖链
  */
 export function getSpecifiedUin(argv: string[] = process.argv): string | undefined {
     for (let i = 0; i < argv.length; i++) {
@@ -71,13 +162,7 @@ export function getSpecifiedUin(argv: string[] = process.argv): string | undefin
 
 export type Cdn = 'cf' | 'china'
 
-/**
- * 解析接入点 CDN, 传给 SignProxy init。
- * 优先级: argv `--cdn china` / `--cdn=china` > 环境变量 CDN > 默认 cf。
- * 环境变量名 (CDN/cdn) 与值 (china/CHINA/...) 都大小写无关。
- * cf (默认) = api-auth.luckylillia.com; china = llbot-api-auth.wumiao.wang。
- * 非 cf/china 的值回退到 cf (SignProxy 侧还会再校验一次并对非法值报错)。
- */
+/** `--cdn` > 环境变量 CDN (名和值不分大小写) > cf。cf = api-auth.luckylillia.com, china = llbot-api-auth.wumiao.wang */
 export function getCdn(argv: string[] = process.argv, env: NodeJS.ProcessEnv = process.env): Cdn {
     let raw: string | undefined
     for (let i = 0; i < argv.length; i++) {
@@ -85,7 +170,6 @@ export function getCdn(argv: string[] = process.argv, env: NodeJS.ProcessEnv = p
         if (a === '--cdn' && i + 1 < argv.length) { raw = argv[i + 1]; break }
         if (a.startsWith('--cdn=')) { raw = a.slice('--cdn='.length); break }
     }
-    // argv 未指定时回退环境变量; 变量名大小写无关 (CDN / cdn / Cdn 均可)
     if (raw === undefined) {
         const key = Object.keys(env).find(k => k.toLowerCase() === 'cdn')
         if (key) raw = env[key]
@@ -93,11 +177,7 @@ export function getCdn(argv: string[] = process.argv, env: NodeJS.ProcessEnv = p
     return raw?.trim().toLowerCase() === 'china' ? 'china' : 'cf'
 }
 
-/**
- * Web page where users obtain an Auth Token, on the same access point as getCdn().
- * This is the manager frontend host, not the API host SignProxy talks to; the two are
- * deployed on separate domains (see ManagerServer deploy/deploy-edgeone-pages.sh).
- */
+/** The manager frontend, on a different domain from the API host the native signing module talks to. */
 export function getAuthTokenPageUrl(cdn: Cdn = getCdn()): string {
     return cdn === 'china' ? 'https://llbot.wumiao.wang' : 'https://auth.luckylillia.com'
 }
@@ -105,25 +185,35 @@ export function getAuthTokenPageUrl(cdn: Cdn = getCdn()): string {
 export type ProtocolId = 'linux' | 'windows' | 'macos' | 'watch'
 
 /**
- * 解析要用的协议 (进程级, 决定 appInfo profile + session 文件命名)。
- * 优先级: argv `--protocol <v>` / `--protocol=<v>` / `-p <v>` / `-p=<v>` > 环境变量 PROTOCOL > 默认 linux。
- * 值大小写无关, 支持别名: win/windows -> windows, mac/macos/darwin -> macos, wat/watch -> watch,
- * lnx/linux -> linux。非法/未指定一律回退 linux (向后兼容: 老部署不带 --protocol 仍跑 Linux)。
- * 纯 argv 解析, 无依赖 (config service / profile registry 都要用, 不能牵扯 native-sign 依赖链)。
+ * The profile the protocol layer runs with. The pure protocol: what it is locked to, else `--protocol` / `-p` >
+ * the PROTOCOL environment variable > the NT protocol plugin's choice > linux (its default); an unknown value of
+ * a flag or the variable is linux. NativeQQ has always run with linux unless launched with another (highway
+ * appId, SsoInfoSync), so switching to it keeps that.
  */
-export function getProtocol(argv: string[] = process.argv, env: NodeJS.ProcessEnv = process.env): ProtocolId {
-    let raw: string | undefined
+export function getProtocol(): ProtocolId {
+    const pinned = launchPins().protocol?.value
+    if (selection?.mode === 'nativeqq') return pinned ?? 'linux'
+    return locked ?? pinned ?? selection?.protocol ?? 'linux'
+}
+
+/** A blank value pins nothing, e.g. PROTOCOL= from a compose file whose variable is unset. */
+function pinnedProtocol(argv: string[], env: NodeJS.ProcessEnv): { value: ProtocolId; by: string } | undefined {
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i]
-        if ((a === '--protocol' || a === '-p') && i + 1 < argv.length) { raw = argv[i + 1]; break }
-        if (a.startsWith('--protocol=')) { raw = a.slice('--protocol='.length); break }
-        if (a.startsWith('-p=')) { raw = a.slice('-p='.length); break }
+        let raw: string | undefined
+        let by = a
+        if (a === '--protocol' || a === '-p') raw = argv[i + 1]
+        else if (a.startsWith('--protocol=')) [by, raw] = ['--protocol', a.slice('--protocol='.length)]
+        else if (a.startsWith('-p=')) [by, raw] = ['-p', a.slice('-p='.length)]
+        if (raw?.trim()) return { value: normalizeProtocol(raw), by }
     }
-    if (raw === undefined) {
-        const key = Object.keys(env).find(k => k.toLowerCase() === 'protocol')
-        if (key) raw = env[key]
-    }
-    switch (raw?.trim().toLowerCase()) {
+    const key = Object.keys(env).find(k => k.toLowerCase() === 'protocol')
+    const raw = key ? env[key] : undefined
+    if (key && raw?.trim()) return { value: normalizeProtocol(raw), by: key }
+}
+
+function normalizeProtocol(raw: string): ProtocolId {
+    switch (raw.trim().toLowerCase()) {
         case 'win':
         case 'windows':
             return 'windows'
