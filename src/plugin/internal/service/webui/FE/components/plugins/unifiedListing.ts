@@ -59,10 +59,47 @@ export function mergePluginItems(plugins: PluginStatus[], sources: CatalogSource
   }
 
   const rank = (item: PluginListItem) => CATEGORIES.findIndex(category => category.key === itemCategory(item))
-  const enabled = (item: PluginListItem) => !!item.plugin && !item.plugin.disabled
-  const added = [...remaining.values()].sort((a, b) => Number(enabled(b)) - Number(enabled(a)) || rank(a) - rank(b) || Number(itemBuiltin(b)) - Number(itemBuiltin(a))
-    || Number(isInstalled(b)) - Number(isInstalled(a)) || itemName(a).localeCompare(itemName(b)) || a.key.localeCompare(b.key))
-  return ordered.concat(added)
+  // Always keep enabled first, then installed-but-disabled, then uninstalled catalog items.
+  const tier = (item: PluginListItem) => item.plugin && !item.plugin.disabled ? 0 : isInstalled(item) ? 1 : 2
+  const added = [...remaining.values()].sort((a, b) => tier(a) - tier(b) || rank(a) - rank(b) || Number(itemBuiltin(b)) - Number(itemBuiltin(a))
+    || itemName(a).localeCompare(itemName(b)) || a.key.localeCompare(b.key))
+  const orderedInstalled = ordered.filter(isInstalled)
+  const orderedUninstalled = ordered.filter(item => !isInstalled(item))
+  const addedInstalled = added.filter(isInstalled)
+  const addedUninstalled = added.filter(item => !isInstalled(item))
+  return [...orderedInstalled, ...addedInstalled, ...orderedUninstalled, ...addedUninstalled]
+}
+
+export interface PluginJumpPlan {
+  item: PluginListItem
+  filters: PluginFilters
+  page: number
+}
+
+/** Finds a plugin by package or entry name and returns the minimal filter adjustments + 1-based page needed to show it. */
+export function planPluginJump(
+  allItems: PluginListItem[],
+  current: PluginFilters,
+  targetName: string,
+  pageSize: number,
+): PluginJumpPlan | null {
+  const target = allItems.find(item => itemName(item) === targetName || item.plugin?.name === targetName)
+  if (!target) return null
+  const next: PluginFilters = { ...current }
+  if (next.installation === 'uninstalled' && isInstalled(target)) next.installation = 'all'
+  else if (next.installation === 'installed' && !isInstalled(target)) next.installation = 'all'
+  if (next.origin === 'builtin' && !itemBuiltin(target)) next.origin = 'all'
+  else if (next.origin === 'third-party' && itemBuiltin(target)) next.origin = 'all'
+  if (next.status === 'enabled' && (!target.plugin || target.plugin.disabled)) next.status = 'all'
+  else if (next.status === 'disabled' && (!isInstalled(target) || (target.plugin && !target.plugin.disabled))) next.status = 'all'
+  else if (next.status === 'attention' && !(target.plugin && needsAttention(target.plugin)) && !target.packageStatus?.error) next.status = 'all'
+  if (next.category !== 'all' && itemCategory(target) !== next.category) next.category = 'all'
+  if (next.updatesOnly && !target.updateInfo?.update) next.updatesOnly = false
+  if (next.search.trim() && filterPluginItems([target], next).length === 0) next.search = ''
+  const shown = filterPluginItems(allItems, next)
+  const index = shown.findIndex(item => item.key === target.key)
+  if (index < 0) return null
+  return { item: target, filters: next, page: Math.floor(index / pageSize) + 1 }
 }
 
 export interface PluginFilters {

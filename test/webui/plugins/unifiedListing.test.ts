@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PluginCatalogItem, PluginCatalogState, PluginInstalledPackage } from '@luckylillia-dev/plugin-sdk/webui'
 import type { CatalogSource } from '@/plugin/internal/service/webui/FE/components/plugins/catalog'
 import {
-  filterPluginItems, isInstalled, itemBuiltin, itemCategory, itemName, mergePluginItems, type PluginFilters,
+  filterPluginItems, isInstalled, itemBuiltin, itemCategory, itemName, mergePluginItems, planPluginJump, type PluginFilters,
 } from '@/plugin/internal/service/webui/FE/components/plugins/unifiedListing'
 import type { PluginStatus } from '@/plugin/internal/service/webui/FE/types/plugins'
 
@@ -158,5 +158,95 @@ describe('unified plugin list', () => {
       expect(filterPluginItems(items, { ...filters, search: query }).map(itemName)).toEqual(['remote-tools'])
     }
     expect(filterPluginItems(items, { ...filters, search: 'absent' })).toEqual([])
+  })
+
+  it('orders plugins as enabled, then installed-disabled, then uninstalled across categories', () => {
+    const enabledTool = plugin('enabled-tool', { manifest: { category: 'tool' } })
+    const disabledTool = plugin('disabled-tool', { disabled: true, state: 'disposed', manifest: { category: 'tool' } })
+    const disabledChat = plugin('disabled-chat', { disabled: true, state: 'disposed', manifest: { category: 'chat' } })
+    const market = source({
+      installed: [installed('enabled-tool'), installed('disabled-tool'), installed('disabled-chat')],
+      items: [
+        entry('uninstalled-protocol', { category: 'protocol' }),
+        entry('uninstalled-adapter', { category: 'adapter' }),
+      ],
+    })
+    const items = mergePluginItems([disabledTool, enabledTool, disabledChat], [market])
+    expect(items.map(itemName)).toEqual([
+      'enabled-tool',
+      'disabled-chat',
+      'disabled-tool',
+      'uninstalled-protocol',
+      'uninstalled-adapter',
+    ])
+  })
+
+  it('keeps newly installed plugins ahead of uninstalled catalog items even during an active visit', () => {
+    const enabled = plugin('enabled-a', { manifest: { category: 'protocol' } })
+    const disabled = plugin('disabled-a', { disabled: true, state: 'disposed', manifest: { category: 'tool' } })
+    const beforeMarket = source({
+      installed: [installed('enabled-a'), installed('disabled-a')],
+      items: [entry('fresh-one', { category: 'adapter' }), entry('still-uninstalled', { category: 'protocol' })],
+    })
+    const visitOrder = mergePluginItems([enabled, disabled], [beforeMarket]).map(item => item.key)
+    expect(visitOrder).toEqual(['entry:enabled-a', 'entry:disabled-a', 'catalog:still-uninstalled', 'catalog:fresh-one'])
+
+    const newlyInstalled = plugin('fresh-one', { id: 'new-id', disabled: true, state: 'disposed', manifest: { category: 'adapter' } })
+    const afterMarket = source({
+      installed: [installed('enabled-a'), installed('disabled-a'), installed('fresh-one')],
+      items: [entry('fresh-one', { category: 'adapter' }), entry('still-uninstalled', { category: 'protocol' })],
+    })
+    const after = mergePluginItems([enabled, disabled, newlyInstalled], [afterMarket], visitOrder)
+    expect(after.map(itemName)).toEqual(['enabled-a', 'disabled-a', 'fresh-one', 'still-uninstalled'])
+  })
+
+  it('plans jump page and relaxes only conflicting filters so a newly installed plugin is visible', () => {
+    const enabled = Array.from({ length: 12 }, (_, index) =>
+      plugin(`enabled-${String(index).padStart(2, '0')}`, { manifest: { category: 'tool' } }),
+    )
+    const target = plugin('@luckylillia-dev/plugin-onebot11', {
+      id: 'ob11', disabled: true, state: 'disposed', manifest: { category: 'adapter' }, title: 'OneBot 11',
+    })
+    const market = source({
+      installed: [...enabled.map(p => installed(p.name)), installed(target.name)],
+      items: [entry(target.name, { category: 'adapter', title: 'OneBot 11' }), entry('uninstalled-a', { category: 'chat' })],
+    })
+    const allItems = mergePluginItems([...enabled, target], [market])
+
+    // Page 2 in unfiltered list (12 enabled items on page 1, target at index 12 -> page 2)
+    const direct = planPluginJump(allItems, filters, target.name, 12)
+    expect(direct?.item.key).toBe('entry:ob11')
+    expect(direct?.page).toBe(2)
+    expect(direct?.filters).toEqual(filters)
+
+    // Installed from the 'uninstalled' tab with conflicting status/origin/category/search -> relaxes them
+    const relaxed = planPluginJump(allItems, {
+      installation: 'uninstalled',
+      origin: 'builtin',
+      status: 'enabled',
+      category: 'protocol',
+      search: 'something-else',
+      updatesOnly: true,
+    }, target.name, 12)
+    expect(relaxed).toMatchObject({
+      page: 2,
+      filters: { installation: 'all', origin: 'all', status: 'all', category: 'all', search: '', updatesOnly: false },
+    })
+
+    // Compatible filters stay intact
+    const preserved = planPluginJump(allItems, {
+      installation: 'all',
+      origin: 'third-party',
+      status: 'disabled',
+      category: 'adapter',
+      search: 'onebot',
+      updatesOnly: false,
+    }, target.name, 12)
+    expect(preserved).toMatchObject({
+      page: 1,
+      filters: { installation: 'all', origin: 'third-party', status: 'disabled', category: 'adapter', search: 'onebot', updatesOnly: false },
+    })
+
+    expect(planPluginJump(allItems, filters, 'missing-plugin', 12)).toBeNull()
   })
 })

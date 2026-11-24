@@ -5,9 +5,17 @@ import type {
 
 export class HttpError extends Error implements HttpErrorApi {
   readonly name = 'HttpError' as const
+  /** Sanitized proxy address (`protocol//host`) when the failed request went through a proxy */
+  readonly proxy?: string
 
-  constructor(message: string, readonly code?: string, readonly response?: HttpResponse, options?: { cause?: unknown }) {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly response?: HttpResponse,
+    options?: { cause?: unknown; proxy?: string },
+  ) {
     super(message, options)
+    this.proxy = options?.proxy
   }
 }
 
@@ -67,15 +75,28 @@ export function sniff(bytes: Uint8Array): string | undefined {
   if (starts(0x42, 0x4d)) return 'image/bmp'
 }
 
+/** Strips credentials and path so proxy errors never leak user:password */
+function safeProxyOrigin(raw: string): string {
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    return `${parsed.protocol}//${parsed.host}`
+  } catch {
+    return ''
+  }
+}
+
 /** undici answers every failure with "fetch failed": the code is down the cause chain */
-function transportError(error: unknown, url: URL, callerSignal?: AbortSignal | null): unknown {
+function transportError(error: unknown, url: URL, callerSignal?: AbortSignal | null, proxy = ''): unknown {
   // The caller's own abort is theirs to handle
   if (callerSignal?.aborted) return callerSignal.reason
-  if ((error as Error)?.name === 'TimeoutError') return new HttpError(`${url.origin} did not answer in time`, 'ETIMEDOUT', undefined, { cause: error })
+  const hint = proxy ? `（经代理 ${proxy}，请检查代理设置）` : ''
+  const options = proxy ? { cause: error, proxy } : { cause: error }
+  if ((error as Error)?.name === 'TimeoutError') return new HttpError(`${url.origin} did not answer in time${hint}`, 'ETIMEDOUT', undefined, options)
   let cause = error as { message?: string; code?: string; cause?: unknown } | undefined
   while (cause?.cause) cause = cause.cause as typeof cause
   const reason = cause?.code ?? cause?.message ?? String(error)
-  return new HttpError(`cannot reach ${url.origin}: ${reason}`, cause?.code, undefined, { cause: error })
+  return new HttpError(`cannot reach ${url.origin}: ${reason}${hint}`, cause?.code, undefined, options)
 }
 
 function filenameOf(headers: Headers, url: URL): string | undefined {
@@ -103,6 +124,17 @@ export class HttpClient implements Http {
     return proxy.url
   }
 
+  private usedProxy(url: URL, request: HttpFetchInit, config: HttpConfig): string {
+    if (!request.dispatcher) return ''
+    try {
+      const proxy = { url: '' }
+      this.ctx.emit('http/proxy', url, proxy, config)
+      return safeProxyOrigin(proxy.url)
+    } catch {
+      return ''
+    }
+  }
+
   async fetch(input: string | URL, init: RequestInit = {}, more?: HttpConfig): Promise<Response> {
     const config = mergeConfig(this.config, more)
     const url = resolve(input, config.baseURL)
@@ -116,7 +148,7 @@ export class HttpClient implements Http {
     try {
       return await fetch(url, request as RequestInit)
     } catch (error) {
-      throw transportError(error, url, init.signal)
+      throw transportError(error, url, init.signal, this.usedProxy(url, request, config))
     }
   }
 

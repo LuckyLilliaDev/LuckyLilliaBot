@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { SchemaForm, usePluginContext, type ConfigEditorProps, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
+import { SchemaSettings, usePluginContext, type PluginConfigState, type WebUIPlugin } from '@luckylillia-dev/plugin-sdk/webui'
 
 export const name = 'builtin:proxy'
 
@@ -54,16 +54,16 @@ const ProxyTest: React.FC<{ address: string }> = ({ address }) => {
   )
 }
 
-// In the plugin's config dialog rather than a page of its own: one address, seldom changed
-const ProxyEditor = ({ value, onChange, schema, errors }: ConfigEditorProps<{ proxyAgent?: string }>) => (
-  <div className="space-y-6">
-    <SchemaForm schema={schema} value={value} onChange={onChange} errors={errors} />
-    <ProxyTest address={value?.proxyAgent ?? ''} />
-  </div>
+const ProxySettings = () => (
+  <SchemaSettings>
+    {(config: PluginConfigState<{ proxyAgent?: string }>) => (
+      <ProxyTest address={config.value?.proxyAgent ?? ''} />
+    )}
+  </SchemaSettings>
 )
 
 const apply: WebUIPlugin = (ctx) => {
-  ctx.config(ProxyEditor)
+  ctx.page({ id: 'proxy', title: '代理', icon: 'globe', component: ProxySettings, order: 36, settings: true })
 }
 
 export default apply

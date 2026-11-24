@@ -1,8 +1,11 @@
-import type { PluginCatalogItem, PluginInstalledPackage, PluginUpdateInfo, WebUIContext } from '@luckylillia-dev/plugin-sdk/webui'
+import type {
+  PluginCatalogItem, PluginInstalledPackage, PluginPackageProgress, PluginUpdateInfo, WebUIContext,
+} from '@luckylillia-dev/plugin-sdk/webui'
 import { imageUrl, previewImages, type CatalogScreenshot } from '../images'
 
 export type InstalledPackage = PluginInstalledPackage
 export type UpdateInfo = PluginUpdateInfo
+export type PackageProgress = PluginPackageProgress
 
 interface CatalogItem extends Omit<PluginCatalogItem, 'iconUrl' | 'screenshots' | 'load'> {
   icon?: string
@@ -29,12 +32,33 @@ export class MarketStore {
   checking = false
   checkedAt = 0
   busy = new Set<string>()
+  progress: Record<string, PackageProgress> = {}
+  localProgress: Record<string, PackageProgress> = {}
   version = 0
   private listeners = new Set<() => void>()
   private installedRequest = 0
   private catalogRequest = 0
   private updateRequest = 0
   private stopWatching?: () => void
+
+  setLocalProgress(key: string, progress: PackageProgress) {
+    this.localProgress = { ...this.localProgress, [key]: progress }
+  }
+
+  clearLocalProgress(key: string) {
+    if (!Object.hasOwn(this.localProgress, key)) return
+    const next = { ...this.localProgress }
+    delete next[key]
+    this.localProgress = next
+  }
+
+  mergedProgress(): Record<string, PackageProgress> {
+    return { ...this.localProgress, ...this.progress }
+  }
+
+  allBusy(): string[] {
+    return [...new Set([...this.busy, ...Object.keys(this.progress)])]
+  }
 
   connect(ctx: WebUIContext): () => void {
     this.reset()
@@ -61,6 +85,8 @@ export class MarketStore {
     this.installedError = ''
     this.loadingInstalled = false
     this.busy.clear()
+    this.progress = {}
+    this.localProgress = {}
     this.invalidateUpdates()
   }
 
@@ -119,8 +145,19 @@ export class MarketStore {
     const timer = setInterval(() => { if (visible()) void this.refresh(true) }, UPDATE_CHECK_INTERVAL)
     if (typeof window !== 'undefined') window.addEventListener('focus', refresh)
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', refresh)
+    const ctx = this.ctx
+    const stopProgress = typeof ctx?.events === 'function'
+      ? ctx.events('/api/market/progress', {
+        progress: (data: unknown) => {
+          if (this.ctx !== ctx || !data || typeof data !== 'object' || Array.isArray(data)) return
+          this.progress = data as Record<string, PackageProgress>
+          this.emit()
+        },
+      })
+      : undefined
     this.stopWatching = () => {
       clearInterval(timer)
+      stopProgress?.()
       if (typeof window !== 'undefined') window.removeEventListener('focus', refresh)
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', refresh)
     }

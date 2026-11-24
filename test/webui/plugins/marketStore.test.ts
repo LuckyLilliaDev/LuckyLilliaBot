@@ -225,4 +225,39 @@ describe('market update state', () => {
     expect(store.catalogError).toBe('')
     expect(store.loadingCatalog).toBe(false)
   })
+
+  it('subscribes to live progress SSE, merges optimistic local progress and cleans up on unsubscribe', async () => {
+    const listeners: Record<string, (data: unknown) => void> = {}
+    const stopEvents = vi.fn()
+    const events = vi.fn((_path: string, handlers: Record<string, (data: unknown) => void>) => {
+      Object.assign(listeners, handlers)
+      return stopEvents
+    })
+    disconnect()
+    disconnect = store.connect({ api, events } as unknown as WebUIContext)
+    const unsubscribe = store.subscribe(() => {})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(events).toHaveBeenCalledWith('/api/market/progress', expect.objectContaining({ progress: expect.any(Function) }))
+
+    store.setLocalProgress('pkg-a', { phase: 'planning', detail: '正在准备…' })
+    expect(store.mergedProgress()['pkg-a']).toEqual({ phase: 'planning', detail: '正在准备…' })
+
+    listeners.progress({
+      'pkg-a': { phase: 'downloading', percent: 42, detail: '下载中 4.2 MB / 10.0 MB' },
+      'pkg-b': { phase: 'queued', detail: '排队中…' },
+    })
+    expect(store.mergedProgress()).toEqual({
+      'pkg-a': { phase: 'downloading', percent: 42, detail: '下载中 4.2 MB / 10.0 MB' },
+      'pkg-b': { phase: 'queued', detail: '排队中…' },
+    })
+    expect(store.allBusy()).toEqual(['pkg-a', 'pkg-b'])
+
+    store.clearLocalProgress('pkg-a')
+    listeners.progress({})
+    expect(store.mergedProgress()).toEqual({})
+    expect(store.allBusy()).toEqual([])
+
+    unsubscribe()
+    expect(stopEvents).toHaveBeenCalledTimes(1)
+  })
 })

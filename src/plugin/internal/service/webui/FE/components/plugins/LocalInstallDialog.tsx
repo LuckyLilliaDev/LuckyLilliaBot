@@ -4,12 +4,19 @@ import { FileUp, FolderOpen, FolderSearch, Loader2, X } from 'lucide-react'
 import { SlotOutlet } from '../../plugin-host/views'
 import { getPluginDirectories } from '../../utils/pluginApi'
 
+export interface LocalInstalledPlugin {
+  name: string
+  title?: string
+  version?: string
+  updated?: boolean
+}
+
 interface Props {
   scanning: boolean
   busy: boolean
   onScan(): Promise<void>
   onClose(): void
-  onInstalled(): void
+  onInstalled(installed?: LocalInstalledPlugin): void
 }
 
 const LocalInstallDialog: React.FC<Props> = ({ scanning, busy, onScan, onClose, onInstalled }) => {

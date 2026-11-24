@@ -2053,6 +2053,32 @@ describe('the market', () => {
     expect(versionAt()).toBe('1.0.0')
     expect(readdirNames(pluginRoot)).toEqual([PLUGIN])
   })
+
+  it('tracks live install phases and queues concurrent installs safely', async () => {
+    const second = 'luckylillia-plugin-second'
+    publishPlugin(second)
+    const snapshots: Record<string, { phase: string; percent?: number; detail: string }>[] = []
+    const stop = market.onProgress(tasks => snapshots.push(tasks))
+    try {
+      const firstPromise = market.install(PLUGIN)
+      const secondPromise = market.install(second)
+      expect(market.progress()[second]?.phase).toBe('queued')
+      const [firstOutcome, secondOutcome] = await Promise.all([firstPromise, secondPromise])
+      expect(firstOutcome.name).toBe(PLUGIN)
+      expect(secondOutcome.name).toBe(second)
+    } finally {
+      stop()
+    }
+    expect(market.progress()).toEqual({})
+    const firstPhases = new Set(snapshots.map(snap => snap[PLUGIN]?.phase).filter(Boolean))
+    expect(firstPhases.has('planning')).toBe(true)
+    expect(firstPhases.has('downloading')).toBe(true)
+    expect(firstPhases.has('installing')).toBe(true)
+    const secondPhases = new Set(snapshots.map(snap => snap[second]?.phase).filter(Boolean))
+    expect(secondPhases.has('queued')).toBe(true)
+    expect(secondPhases.has('downloading')).toBe(true)
+    expect(secondPhases.has('installing')).toBe(true)
+  })
 })
 
 function readdirNames(dir: string): string[] {

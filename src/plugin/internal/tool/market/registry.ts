@@ -42,13 +42,20 @@ export interface RegistryClient {
    */
   packument(name: string, full?: boolean, need?: (document: Packument) => boolean): Promise<Packument>
   /** Checked against `dist.integrity` / `dist.shasum` */
-  tarball(version: PackageVersion, maxBytes?: number): Promise<Buffer>
+  tarball(version: PackageVersion, maxBytes?: number, onProgress?: (loaded: number, total?: number) => void): Promise<Buffer>
 }
 
 export class RegistryError extends Error {
-  constructor(message: string, readonly status?: number) {
+  constructor(message: string, readonly status?: number, readonly proxy?: string) {
     super(message)
   }
+}
+
+const proxyHint = (proxy?: string) => proxy ? `（经代理 ${proxy}，请检查代理设置）` : ''
+
+function proxyOf(error: unknown): string | undefined {
+  const proxy = (error as { proxy?: unknown } | undefined)?.proxy
+  return typeof proxy === 'string' && proxy ? proxy : undefined
 }
 
 const ABBREVIATED = 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*'
@@ -63,16 +70,19 @@ export class Registry implements RegistryClient {
     return this.json<Packument>(`${base(this.url)}/${name.replace('/', '%2f')}`, full ? 'application/json' : ABBREVIATED, `package ${name}`)
   }
 
-  async tarball(version: PackageVersion, maxBytes?: number): Promise<Buffer> {
+  async tarball(version: PackageVersion, maxBytes?: number, onProgress?: (loaded: number, total?: number) => void): Promise<Buffer> {
     try {
       const response = await this.fetch(version.dist.tarball, { signal: AbortSignal.timeout(120_000) })
       if (!response.ok) throw new RegistryError(`${version.name}@${version.version}: ${response.status} fetching ${version.dist.tarball}`, response.status)
-      const data = maxBytes === undefined ? Buffer.from(await response.arrayBuffer()) : await boundedBody(response, maxBytes)
+      const data = maxBytes !== undefined
+        ? await boundedBody(response, maxBytes, onProgress)
+        : onProgress ? await streamBody(response, onProgress) : Buffer.from(await response.arrayBuffer())
       verify(data, version)
       return data
     } catch (e) {
       if (e instanceof RegistryError) throw e
-      throw new RegistryError(`${version.name}@${version.version}: cannot download ${version.dist.tarball}: ${reasonOf(e)}`)
+      const proxy = proxyOf(e)
+      throw new RegistryError(`${version.name}@${version.version}: cannot download ${version.dist.tarball}: ${reasonOf(e)}${proxyHint(proxy)}`, undefined, proxy)
     }
   }
 
@@ -81,7 +91,8 @@ export class Registry implements RegistryClient {
     try {
       response = await this.fetch(url, { headers: { accept }, signal: AbortSignal.timeout(30_000) })
     } catch (e) {
-      throw new RegistryError(`${what}: cannot reach ${new URL(url).origin}: ${reasonOf(e)}`)
+      const proxy = proxyOf(e)
+      throw new RegistryError(`${what}: cannot reach ${new URL(url).origin}: ${reasonOf(e)}${proxyHint(proxy)}`, undefined, proxy)
     }
     if (response.status === 404) throw new RegistryError(`${what} not found on ${new URL(url).origin}`, 404)
     if (!response.ok) throw new RegistryError(`${what}: ${new URL(url).origin} answered ${response.status}`, response.status)
@@ -142,11 +153,11 @@ export class Registries implements RegistryClient {
     throw combine(errors)
   }
 
-  async tarball(version: PackageVersion, maxBytes?: number): Promise<Buffer> {
+  async tarball(version: PackageVersion, maxBytes?: number, onProgress?: (loaded: number, total?: number) => void): Promise<Buffer> {
     const errors: RegistryError[] = []
     for (const [url, registry] of this.tarballSources(version)) {
       try {
-        return await registry.tarball({ ...version, dist: { ...version.dist, tarball: url } }, maxBytes)
+        return await registry.tarball({ ...version, dist: { ...version.dist, tarball: url } }, maxBytes, onProgress)
       } catch (e) {
         // Unreachable, missing or corrupt there: the next registry may still have the right file
         errors.push(this.failed(registry, e))
@@ -176,12 +187,21 @@ export class Registries implements RegistryClient {
 
 function combine(errors: RegistryError[]): RegistryError {
   if (errors.length === 1) return errors[0]
-  return new RegistryError(errors.map(error => error.message).join('; '), errors.every(error => error.status === 404) ? 404 : undefined)
+  const status = errors.every(error => error.status === 404) ? 404 : undefined
+  const firstProxy = errors[0]?.proxy
+  if (firstProxy && errors.every(error => error.proxy === firstProxy)) {
+    const suffix = proxyHint(firstProxy)
+    const parts = errors.map(error => error.message.endsWith(suffix) ? error.message.slice(0, -suffix.length) : error.message)
+    return new RegistryError(`${parts.join('; ')}${suffix}`, status, firstProxy)
+  }
+  return new RegistryError(errors.map(error => error.message).join('; '), status)
 }
 
 /** Catalog downloads have a small limit, enforced before buffering the entire response. */
-async function boundedBody(response: Response, maxBytes: number): Promise<Buffer> {
-  if (Number(response.headers.get('content-length')) > maxBytes) {
+async function boundedBody(response: Response, maxBytes: number, onProgress?: (loaded: number, total?: number) => void): Promise<Buffer> {
+  const totalHeader = Number(response.headers.get('content-length'))
+  const total = Number.isFinite(totalHeader) && totalHeader > 0 ? totalHeader : undefined
+  if (total !== undefined && total > maxBytes) {
     await response.body?.cancel()
     throw new RegistryError('目录包下载超过允许的大小')
   }
@@ -199,6 +219,32 @@ async function boundedBody(response: Response, maxBytes: number): Promise<Buffer
         throw new RegistryError('目录包下载超过允许的大小')
       }
       chunks.push(value)
+      onProgress?.(size, total)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return Buffer.concat(chunks, size)
+}
+
+async function streamBody(response: Response, onProgress: (loaded: number, total?: number) => void): Promise<Buffer> {
+  const totalHeader = Number(response.headers.get('content-length'))
+  const total = Number.isFinite(totalHeader) && totalHeader > 0 ? totalHeader : undefined
+  const reader = response.body?.getReader()
+  if (!reader) {
+    const data = Buffer.from(await response.arrayBuffer())
+    onProgress(data.byteLength, total ?? data.byteLength)
+    return data
+  }
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      chunks.push(value)
+      onProgress(size, total)
     }
   } finally {
     reader.releaseLock()

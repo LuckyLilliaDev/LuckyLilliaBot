@@ -4,6 +4,7 @@ import { Context } from 'cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as Proxy from '@/plugin/internal/service/proxy'
 import { proxySettings } from '@/plugin/internal/service/proxy/settings'
+import { Registries } from '@/plugin/internal/tool/market/registry'
 import HttpService from '@/universal/http'
 import { startConnectProxy } from '../examples/fakeAi'
 
@@ -229,5 +230,35 @@ describe('the builtin proxy', () => {
     } finally {
       await proxy.close()
     }
+  })
+
+  it('hints to check proxy settings without leaking credentials when a proxied request or registry check fails', async () => {
+    const closed = createServer()
+    await new Promise<void>(resolve => closed.listen(0, '127.0.0.1', resolve))
+    const closedPort = (closed.address() as AddressInfo).port
+    await new Promise(resolve => closed.close(resolve))
+
+    await ctx.plugin(Proxy, { proxyAgent: `http://myuser:mysecret@127.0.0.1:${closedPort}` })
+
+    const httpErr = await text(`${far}/fail`).catch(e => e)
+    expect(httpErr).toMatchObject({ name: 'HttpError', code: 'ECONNREFUSED', proxy: `http://127.0.0.1:${closedPort}` })
+    expect(httpErr.message).toContain(`（经代理 http://127.0.0.1:${closedPort}，请检查代理设置）`)
+    expect(httpErr.message).not.toContain('myuser')
+    expect(httpErr.message).not.toContain('mysecret')
+
+    const registries = new Registries(
+      ['https://mirror-a.invalid', 'https://mirror-b.invalid'],
+      (url, init) => ctx.http.fetch(url, init),
+    )
+    const regErr = await registries.packument('@luckylillia-dev/market').catch(e => e)
+    expect(regErr.message).toBe(
+      `package @luckylillia-dev/market: cannot reach https://mirror-a.invalid: ECONNREFUSED; `
+      + `package @luckylillia-dev/market: cannot reach https://mirror-b.invalid: ECONNREFUSED`
+      + `（经代理 http://127.0.0.1:${closedPort}，请检查代理设置）`,
+    )
+
+    // Direct failures (no proxy) do not tell the user to check proxy settings
+    const directErr = await text(`${far}/direct`, { proxyAgent: '' }).catch(e => e)
+    expect(directErr.message).not.toContain('请检查代理设置')
   })
 })

@@ -61,29 +61,37 @@ function useMarket() {
 async function install(name: string, version: string): Promise<boolean> {
   if (store.catalogError || !store.catalog?.some(item => item.name === name && item.version === version)
     || store.installed?.some(pkg => pkg.name === name)) return false
-  return performInstall(name, titleOf(name), () => store.ctx!.api<InstallOutcome>('/api/market/install', { body: { name, version } }))
+  return Boolean(await performInstall(name, titleOf(name), () => store.ctx!.api<InstallOutcome>('/api/market/install', { body: { name, version } }), '安装', false))
 }
 
 async function update(name: string): Promise<boolean> {
   const pkg = store.installed?.find(item => item.name === name)
   const version = store.updates?.[name]?.update
   if (!pkg?.managed || !version) return false
-  return performInstall(name, titleOf(name), () => store.ctx!.api<InstallOutcome>('/api/market/update', {
+  return Boolean(await performInstall(name, titleOf(name), () => store.ctx!.api<InstallOutcome>('/api/market/update', {
     body: { name, version, currentVersion: pkg.version },
-  }), '更新')
+  }), '更新', true))
 }
 
-async function installLocal(file: File): Promise<boolean> {
+async function installLocal(file: File): Promise<InstallOutcome | null> {
   const body = new FormData()
   body.set('file', file)
   body.set('confirm', 'true')
-  return performInstall(LOCAL_INSTALL, file.name, () => store.ctx!.api<InstallOutcome>('/api/market/install-local', { body }))
+  return performInstall(LOCAL_INSTALL, file.name, () => store.ctx!.api<InstallOutcome>('/api/market/install-local', { body }), '安装', false)
 }
 
-async function performInstall(key: string, label: string, request: () => Promise<InstallOutcome>, action = '安装'): Promise<boolean> {
-  if (!store.ctx || store.busy.size || !store.installed || store.installedError) return false
+async function performInstall(
+  key: string,
+  label: string,
+  request: () => Promise<InstallOutcome>,
+  action = '安装',
+  announceSuccess = true,
+): Promise<InstallOutcome | null> {
+  if (!store.ctx || store.busy.has(key) || !store.installed || store.installedError) return null
   const ctx = store.ctx
+  const queued = store.busy.size > 0 || Object.keys(store.progress).length > 0
   store.busy.add(key)
+  store.setLocalProgress(key, queued ? { phase: 'queued', detail: '排队中…' } : { phase: 'planning', detail: '正在准备…' })
   store.invalidateUpdates()
   store.emit()
   try {
@@ -94,27 +102,30 @@ async function performInstall(key: string, label: string, request: () => Promise
       ? `已把 ${title} 从 ${outcome.previous} 更新到 ${outcome.version}`
       : `已安装 ${title} ${outcome.version}`
     if (outcome.dependencies?.length) {
-      what += `；同时安装或更新了依赖插件：${outcome.dependencies.map(dep => `${titleOf(dep.name, dep.title)} ${dep.version}`).join('、')}`
+      const depsText = `同时安装或更新了依赖插件：${outcome.dependencies.map(dep => `${titleOf(dep.name, dep.title)} ${dep.version}`).join('、')}`
+      if (announceSuccess) what += `；${depsText}`
+      else ctx.toast(depsText)
     }
-    if (!outcome.previous || outcome.dependencies?.some(dep => !dep.previous)) what += '；新装插件可在「已安装」中启用'
-    reportResult(ctx, what, outcome)
+    if (announceSuccess && (!outcome.previous || outcome.dependencies?.some(dep => !dep.previous))) what += '；新装插件可在「已安装」中启用'
+    reportResult(ctx, what, outcome, announceSuccess)
     for (const dep of outcome.dependencies ?? []) {
       reportResult(ctx, `依赖插件 ${titleOf(dep.name, dep.title)}`, dep, false)
     }
     if (outcome.scripts.length) {
       ctx.toast(`这些包带安装脚本，没有运行：${outcome.scripts.join('、')}。需要编译的原生模块会加载失败`, 'warning')
     }
-    return true
+    return outcome
   } catch (e) {
     ctx.toast(`${action} ${label} 失败：${errorText(e)}`, 'error')
-    return false
+    return null
   } finally {
     if (store.ctx === ctx) {
       await store.loadInstalled()
       if (store.ctx === ctx) {
         store.busy.delete(key)
+        store.clearLocalProgress(key)
         store.emit()
-        void store.checkUpdates(true)
+        if (!store.busy.size) void store.checkUpdates(true)
       }
     }
   }
@@ -122,7 +133,7 @@ async function performInstall(key: string, label: string, request: () => Promise
 
 async function uninstall(name: string, options: { keepConfig?: boolean } = {}): Promise<boolean> {
   const pkg = store.installed?.find(item => item.name === name)
-  if (!store.ctx || store.busy.size || store.installedError || !pkg?.managed || pkg.builtin) return false
+  if (!store.ctx || store.busy.has(name) || store.installedError || !pkg?.managed || pkg.builtin) return false
   const ctx = store.ctx
   store.busy.add(name)
   store.invalidateUpdates()
@@ -140,7 +151,7 @@ async function uninstall(name: string, options: { keepConfig?: boolean } = {}): 
       if (store.ctx === ctx) {
         store.busy.delete(name)
         store.emit()
-        void store.checkUpdates(true)
+        if (!store.busy.size) void store.checkUpdates(true)
       }
     }
   }
@@ -175,7 +186,7 @@ const CatalogBridge: React.FC<PluginCatalogProps> = ({ loadCatalog, onChange }) 
       installed: market.installed, installedError: market.installedError || undefined,
       updates: market.updates, updatesError: market.updatesError || undefined,
       checking: market.checking, loadingInstalled: market.loadingInstalled, checkedAt: market.checkedAt,
-      busy: [...market.busy], retry: refresh, refresh, install, update, uninstall,
+      busy: market.allBusy(), progress: market.mergedProgress(), retry: refresh, refresh, install, update, uninstall,
     }
   }, [market, market.version, loadCatalog])
 
@@ -184,18 +195,30 @@ const CatalogBridge: React.FC<PluginCatalogProps> = ({ loadCatalog, onChange }) 
   return null
 }
 
-const LocalInstall: React.FC<{ onInstalled(): void; disabled?: boolean }> = ({ onInstalled, disabled }) => {
+const LocalInstall: React.FC<{
+  onInstalled(installed?: { name: string; title?: string; version?: string; updated?: boolean }): void
+  disabled?: boolean
+}> = ({ onInstalled, disabled }) => {
   const market = useMarket()
+  const localProgress = market.mergedProgress()[LOCAL_INSTALL]
   return (
     <LocalInstallPanel
-      busy={market.busy.has(LOCAL_INSTALL)}
-      disabled={!!disabled || !market.installed || market.loadingInstalled || !!market.installedError || market.busy.size > 0}
+      busy={market.busy.has(LOCAL_INSTALL) || !!localProgress}
+      disabled={!!disabled || !market.installed || market.loadingInstalled || !!market.installedError || market.busy.has(LOCAL_INSTALL)}
+      progress={localProgress}
       error={market.installedError}
       onRetry={() => { void market.refresh() }}
       onInstall={async file => {
-        const installed = await installLocal(file)
-        if (installed) onInstalled()
-        return installed
+        const outcome = await installLocal(file)
+        if (outcome) {
+          onInstalled({
+            name: outcome.name,
+            title: titleOf(outcome.name, outcome.title),
+            version: outcome.version,
+            updated: !!outcome.previous,
+          })
+        }
+        return Boolean(outcome)
       }}
     />
   )

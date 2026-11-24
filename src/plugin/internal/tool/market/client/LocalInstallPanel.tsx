@@ -1,17 +1,18 @@
 import React, { useId, useRef, useState } from 'react'
 import { FileArchive, Loader2, ShieldAlert, Upload, X } from 'lucide-react'
-import { usePluginContext } from '@luckylillia-dev/plugin-sdk/webui'
+import { usePluginContext, type PluginPackageProgress } from '@luckylillia-dev/plugin-sdk/webui'
 
 interface Props {
   busy: boolean
   disabled: boolean
+  progress?: PluginPackageProgress
   error?: string
   onRetry(): void
   onInstall(file: File): Promise<boolean>
 }
 
 /** Upload controls inside the host's local installation dialog. */
-const LocalInstallPanel: React.FC<Props> = ({ busy, disabled, error, onRetry, onInstall }) => {
+const LocalInstallPanel: React.FC<Props> = ({ busy, disabled, progress, error, onRetry, onInstall }) => {
   const ctx = usePluginContext()
   const input = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
@@ -131,9 +132,23 @@ const LocalInstallPanel: React.FC<Props> = ({ busy, disabled, error, onRetry, on
             </label>
             <button type="button" onClick={() => { void install() }} disabled={blocked || !confirmed} className="btn-primary ml-auto inline-flex items-center gap-1.5 text-sm">
               {working ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              {working ? '正在安装…' : '安装插件'}
+              {working ? (progress?.percent !== undefined ? `正在安装 ${progress.percent}%` : '正在安装…') : '安装插件'}
             </button>
           </div>
+          {working && progress && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between gap-2 text-xs text-theme-secondary">
+                <span className="truncate">{progress.detail}</span>
+                {progress.percent !== undefined && <span className="shrink-0 font-mono text-pink-600 dark:text-pink-400">{progress.percent}%</span>}
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-theme-item overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-200 ${progress.percent !== undefined ? 'bg-gradient-to-r from-pink-500 to-rose-400' : 'w-1/3 bg-pink-500/60 animate-pulse'}`}
+                  style={progress.percent !== undefined ? { width: `${Math.max(4, Math.min(100, progress.percent))}%` } : undefined}
+                />
+              </div>
+            </div>
+          )}
         </>
       ) : <p className="text-xs text-theme-muted">ZIP 顶层需有 package.json；.tgz / .tar.gz 可使用 npm pack 打包。新装插件默认停用。</p>}
     </div>

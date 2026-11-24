@@ -163,6 +163,13 @@ export interface PluginUpdateInfo {
   error?: string
 }
 
+export interface PluginPackageProgress {
+  phase: 'queued' | 'planning' | 'downloading' | 'installing'
+  /** 0-100 when measurable; omitted for indeterminate phases such as queued or planning. */
+  percent?: number
+  detail: string
+}
+
 /** Snapshot and guarded actions supplied by a catalog plugin. Installed entries remain owned by the host. */
 export interface PluginCatalogState {
   items: PluginCatalogItem[] | null
@@ -176,6 +183,7 @@ export interface PluginCatalogState {
   loadingInstalled: boolean
   checkedAt: number
   busy: readonly string[]
+  progress?: Record<string, PluginPackageProgress>
   retry(): void
   refresh(): void
   install(name: string, version: string): Promise<boolean>

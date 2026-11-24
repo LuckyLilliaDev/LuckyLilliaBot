@@ -4,6 +4,7 @@ import path from 'node:path'
 import { Context } from 'cordis'
 import { compareVersions } from 'compare-versions'
 import { Context as HonoContext, Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 import type { PluginCategory } from '@luckylillia-dev/plugin-sdk'
 import type { PluginStatus, ReloadResult } from '../../../host'
 import type { SharedPackageResult } from '../../../host/shared-packages'
@@ -12,7 +13,7 @@ import { currentPackageName } from '../../../host/renamed'
 import { SHARED_SPECIFIERS } from '../../../host/resolve-hook'
 import { Catalog, type CatalogEntry, type CatalogSnapshot } from './catalog'
 import { ArchiveError, readLocalPackage } from './archive'
-import { Installer, type InstallResult, type PackageSource } from './installer'
+import { Installer, type InstallProgress, type InstallResult, type PackageSource } from './installer'
 import { isExactVersion, isPackageName, pickVersion, PackageVersion, type PackageManifest, type Packument, Registries, RegistryError, type RegistryClient } from './registry'
 import { MarketSchema, registriesOf, type MarketSettings } from './settings'
 import { withLocalUpload } from './upload'
@@ -86,13 +87,76 @@ function entryTitle(entry?: Pick<PluginStatus, 'title' | 'manifest'>): string | 
   return typeof title === 'string' ? title.trim() || undefined : title?.zh ?? title?.['zh-CN'] ?? title?.en
 }
 
+export interface MarketTaskProgress {
+  phase: 'queued' | 'planning' | 'downloading' | 'installing'
+  percent?: number
+  detail: string
+}
+
 export class Market {
   readonly installer: Installer
   private queue: Promise<unknown> = Promise.resolve()
+  private serialPending = 0
+  private tasks = new Map<string, MarketTaskProgress>()
+  private progressListeners = new Set<(tasks: Record<string, MarketTaskProgress>) => void>()
+  private lastProgressEmit = 0
+  private progressTimer?: ReturnType<typeof setTimeout>
 
   /** `root`: the plugin directory it installs into, as a real path */
   constructor(private readonly ctx: Context, readonly registry: RegistryClient, root: string, readonly catalog = new Catalog(registry)) {
     this.installer = new Installer(registry, root, new Set(SHARED_SPECIFIERS))
+  }
+
+  progress(): Record<string, MarketTaskProgress> {
+    return Object.fromEntries([...this.tasks.entries()].map(([name, item]) => [name, { ...item }]))
+  }
+
+  onProgress(listener: (tasks: Record<string, MarketTaskProgress>) => void): () => void {
+    this.progressListeners.add(listener)
+    return () => { this.progressListeners.delete(listener) }
+  }
+
+  private emitProgress(immediate = false) {
+    if (!this.progressListeners.size) return
+    const flush = () => {
+      if (this.progressTimer) {
+        clearTimeout(this.progressTimer)
+        this.progressTimer = undefined
+      }
+      this.lastProgressEmit = Date.now()
+      const snapshot = this.progress()
+      for (const listener of this.progressListeners) listener(snapshot)
+    }
+    const elapsed = Date.now() - this.lastProgressEmit
+    if (immediate || elapsed >= 80) {
+      flush()
+    } else if (!this.progressTimer) {
+      this.progressTimer = setTimeout(flush, 80 - elapsed)
+    }
+  }
+
+  private setTaskProgress(key: string, next: MarketTaskProgress, immediate = false) {
+    const prev = this.tasks.get(key)
+    const phaseChanged = !prev || prev.phase !== next.phase
+    if (!phaseChanged && prev.percent === next.percent && prev.detail === next.detail) return
+    this.tasks.set(key, next)
+    this.emitProgress(immediate || phaseChanged)
+  }
+
+  private clearTaskProgress(key: string) {
+    if (!this.tasks.delete(key)) return
+    this.emitProgress(true)
+  }
+
+  private trackTask<T>(key: string, run: (report: (progress: MarketTaskProgress) => void) => Promise<T>): Promise<T> {
+    const queued = this.serialPending > 0
+    this.setTaskProgress(key, queued ? { phase: 'queued', detail: '排队中…' } : { phase: 'planning', detail: '正在准备…' }, true)
+    return this.serial(async () => {
+      this.setTaskProgress(key, { phase: 'planning', detail: '正在解析插件信息…' }, true)
+      return run(progress => this.setTaskProgress(key, progress))
+    }).finally(() => {
+      this.clearTaskProgress(key)
+    })
   }
 
   cleanup(): Promise<void> {
@@ -202,12 +266,12 @@ export class Market {
 
   /** Only the catalog's exact version is installable. One install or removal at a time. */
   install(name: string, version?: string): Promise<InstallOutcome> {
-    return this.serial(() => this.installCatalog(name, version))
+    return this.trackTask(name, report => this.installCatalog(name, version, report))
   }
 
   /** A manual update must still refer to the installed and target versions the user saw. */
   update(name: string, version: string, currentVersion: string): Promise<InstallOutcome> {
-    return this.serial(async () => {
+    return this.trackTask(name, async report => {
       this.assertManageable(name)
       const installed = this.installedPackages().find(pkg => pkg.name === currentPackageName(name))
       if (!installed) throw new MarketError(`${name} is no longer installed; refresh the plugin market`, 409)
@@ -217,11 +281,11 @@ export class Market {
       if (!newer(version, installed.version)) {
         throw new MarketError(`${name}@${version} is not newer than installed version ${installed.version}`, 409)
       }
-      return this.installCatalog(name, version)
+      return this.installCatalog(name, version, report)
     })
   }
 
-  private async installCatalog(name: string, version?: string): Promise<InstallOutcome> {
+  private async installCatalog(name: string, version?: string, onProgress?: (progress: InstallProgress) => void): Promise<InstallOutcome> {
     this.assertManageable(name)
     // Keep a single catalog snapshot for the requested plugin and its whole dependency graph.
     const catalog = await this.catalog.load()
@@ -237,7 +301,7 @@ export class Market {
     const problem = this.incompatibility(chosen)
     if (problem) throw new MarketError(`${name}@${entry.version} cannot run on this bot: ${problem}`, 409)
     const plan = await this.planPlugins(this.planned({ manifest: chosen }, name), catalog)
-    return this.installPlan(plan)
+    return this.installPlan(plan, onProgress)
   }
 
   /** Explicit startup requests use npm directly. Existing packages are never updated by this operation. */
@@ -280,27 +344,34 @@ export class Market {
 
   /** Local uploads need no catalog approval; missing plugin dependencies still come from its pinned versions. */
   installLocal(archive: string, filename: string): Promise<InstallOutcome> {
-    return this.serial(async () => {
+    return this.trackTask(':local', async report => {
       await mkdir(this.installer.root, { recursive: true })
       const directory = await mkdtemp(path.join(this.installer.root, '.market-local-'))
       try {
+        report({ phase: 'planning', detail: '正在校验本地压缩包…' })
         const source = await readLocalPackage(archive, filename, directory)
         const { name, version } = source.manifest
         if (this.builtin(name)) throw new MarketError('内置插件只能从插件市场更新，不能用本地包覆盖', 409)
         this.assertManageable(name)
         const problem = this.incompatibility(source.manifest)
         if (problem) throw new MarketError(`${name}@${version} cannot run on this bot: ${problem}`, 409)
-        return await this.installPlan(await this.planPlugins(this.planned(source, name)))
+        return await this.installPlan(await this.planPlugins(this.planned(source, name)), report)
       } finally {
         await rm(directory, { recursive: true, force: true })
       }
     })
   }
 
-  private async installPlan(plan: PlannedPlugin[]): Promise<InstallOutcome> {
+  private async installPlan(plan: PlannedPlugin[], onProgress?: (progress: InstallProgress) => void): Promise<InstallOutcome> {
     const outcomes: InstallOutcome[] = []
-    for (const item of plan) {
-      if (item.source) outcomes.push(await this.installPackage(item.source))
+    const toInstall = plan.filter(item => item.source)
+    for (let index = 0; index < toInstall.length; index++) {
+      const item = toInstall[index]
+      const isDependency = index < toInstall.length - 1
+      const prefix = isDependency ? `依赖 ${item.name}：` : ''
+      outcomes.push(await this.installPackage(item.source!, onProgress
+        ? progress => onProgress({ ...progress, detail: `${prefix}${progress.detail}` })
+        : undefined))
     }
     const outcome = outcomes.pop()!
     if (outcomes.length) {
@@ -439,7 +510,7 @@ export class Market {
     return ordered
   }
 
-  private async installPackage(source: PackageSource): Promise<InstallOutcome> {
+  private async installPackage(source: PackageSource, onProgress?: (progress: InstallProgress) => void): Promise<InstallOutcome> {
     const chosen = source.manifest
     const { name } = chosen
     const builtin = this.builtin(name)
@@ -452,7 +523,7 @@ export class Market {
         if (builtin) await this.ctx.plugins.approveBuiltinPackage(name, chosen.version)
       })
       instances = outcome.instances
-    })
+    }, onProgress)
     if (builtin) {
       this.ctx.logger('market').info(`updated builtin ${name}@${chosen.version}; restart required`)
       const entries = this.ctx.plugins.list().filter(entry => entry.name === builtin.entryName)
@@ -486,11 +557,14 @@ export class Market {
   }
 
   private serial<T>(task: () => Promise<T>): Promise<T> {
+    this.serialPending++
     const result = this.queue.then(() => this.ctx.plugins.withPackageMutation(this.installer.root, async () => {
       // A queued request may have been superseded by another instance. Recheck against disk under the lock.
       await this.ctx.plugins.scan()
       return task()
-    }))
+    })).finally(() => {
+      this.serialPending = Math.max(0, this.serialPending - 1)
+    })
     this.queue = result.catch(() => {})
     return result
   }
@@ -587,6 +661,15 @@ export function createMarketRoutes(ctx: Context, market: Market): Hono {
   router.get('/catalog', c => respond(c, () => market.catalogItems()))
   router.get('/installed', c => respond(c, () => market.installed()))
   router.get('/updates', c => respond(c, () => market.updates()))
+  router.get('/progress', c => streamSSE(c, async (stream) => {
+    const send = (tasks: Record<string, MarketTaskProgress>) => {
+      void stream.writeSSE({ event: 'progress', data: JSON.stringify(tasks) }).catch(() => {})
+    }
+    const dispose = market.onProgress(send)
+    stream.onAbort(dispose)
+    await stream.writeSSE({ event: 'progress', data: JSON.stringify(market.progress()) })
+    await new Promise<void>(resolve => stream.onAbort(resolve))
+  }))
   router.post('/install', c => respond(c, async () => {
     const { name, version } = await body(c)
     return market.install(name, version)

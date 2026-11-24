@@ -24,6 +24,13 @@ const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
 /** Registry packages are downloaded; local packages already have a validated directory on disk. */
 export type PackageSource = { manifest: PackageVersion; directory?: undefined } | LocalPackage
 
+export interface InstallProgress {
+  phase: 'planning' | 'downloading' | 'installing'
+  /** 0-100 when measurable */
+  percent?: number
+  detail: string
+}
+
 export interface InstallResult {
   name: string
   version: string
@@ -67,24 +74,74 @@ export class Installer {
   }
 
   /** Lays `main` and its dependencies out in a scratch directory, then swaps it in for what was there. */
-  async install(source: PackageSource, replace: (apply: () => Promise<void>) => Promise<void> = apply => apply()): Promise<InstallResult> {
+  async install(
+    source: PackageSource,
+    replace: (apply: () => Promise<void>) => Promise<void> = apply => apply(),
+    onProgress?: (progress: InstallProgress) => void,
+  ): Promise<InstallResult> {
     const main = source.manifest
     const target = this.target(main.name)
     if (!target) throw new Error(`invalid package name ${main.name}`)
     await this.assertReal(target)
-    const { root, skipped } = await this.plan(source)
+    onProgress?.({ phase: 'planning', detail: '正在解析依赖…' })
+    const { root, skipped } = await this.plan(source, count => {
+      onProgress?.({ phase: 'planning', detail: `正在解析依赖（已发现 ${count} 个）…` })
+    })
     await mkdir(this.root, { recursive: true })
     const scratch = this.scratch()
     try {
       const nodes = layout(root, scratch)
-      const extract = async ({ node, dir }: typeof nodes[number]) => {
-        if (node.source.directory !== undefined) return renamePackage(node.source.directory, dir)
-        const tar = await gunzipAsync(await this.registry.tarball(node.source.manifest))
+      const totalNodes = nodes.length
+      const fractions = new Float64Array(totalNodes)
+      let completed = 0
+      const emitDownload = (detail: string, percent?: number) => {
+        if (!onProgress) return
+        if (percent !== undefined) {
+          onProgress({ phase: 'downloading', percent, detail })
+          return
+        }
+        let sum = 0
+        for (let i = 0; i < totalNodes; i++) sum += fractions[i]
+        const pct = Math.min(92, Math.max(5, Math.round((sum / totalNodes) * 87) + 5))
+        onProgress({ phase: 'downloading', percent: pct, detail })
+      }
+      if (totalNodes === 1 && nodes[0].node.source.directory === undefined) {
+        emitDownload('正在下载插件包…', 5)
+      } else if (totalNodes > 1) {
+        emitDownload(`下载并解压依赖 0/${totalNodes}`, 5)
+      }
+      const extract = async ({ node, dir }: typeof nodes[number], index: number) => {
+        if (node.source.directory !== undefined) {
+          await renamePackage(node.source.directory, dir)
+          fractions[index] = 1
+          completed++
+          if (totalNodes > 1) emitDownload(`下载并解压依赖 ${completed}/${totalNodes}`)
+          return
+        }
+        const tarball = await this.registry.tarball(node.source.manifest, undefined, (loaded, total) => {
+          if (totalNodes === 1) {
+            if (total && total > 0) {
+              const ratio = Math.min(1, loaded / total)
+              emitDownload(`下载中 ${formatBytes(loaded)} / ${formatBytes(total)}`, Math.min(88, Math.max(5, Math.round(ratio * 85) + 3)))
+            } else {
+              emitDownload(`下载中 ${formatBytes(loaded)}`)
+            }
+          } else if (total && total > 0) {
+            fractions[index] = Math.min(0.85, (loaded / total) * 0.85)
+            emitDownload(`下载并解压依赖 ${completed}/${totalNodes}`)
+          }
+        })
+        if (totalNodes === 1) emitDownload('正在解压插件包…', 90)
+        const tar = await gunzipAsync(tarball)
         await extractPackage(tar, dir)
+        fractions[index] = 1
+        completed++
+        if (totalNodes > 1) emitDownload(`下载并解压依赖 ${completed}/${totalNodes}`)
       }
       // Bundled files must be in place before downloaded dependencies, never racing to overwrite them.
-      await extract(nodes[0])
-      await mapLimit(nodes.slice(1), DOWNLOADS, extract)
+      await extract(nodes[0], 0)
+      await mapLimit(nodes.slice(1).map((entry, idx) => ({ entry, index: idx + 1 })), DOWNLOADS, ({ entry, index }) => extract(entry, index))
+      onProgress?.({ phase: 'installing', percent: 95, detail: '正在写入并加载…' })
       await replace(() => this.swap(scratch, target))
       return {
         name: main.name,
@@ -127,10 +184,11 @@ export class Installer {
    * already, then under the package that needs it. That never shadows what an earlier package resolved: a node's
    * children are all placed before any of its descendants look them up.
    */
-  private async plan(source: PackageSource): Promise<{ root: Node; skipped: string[] }> {
+  private async plan(source: PackageSource, onDiscovered?: (count: number) => void): Promise<{ root: Node; skipped: string[] }> {
     const root: Node = { alias: source.manifest.name, source, children: new Map() }
     const skipped: string[] = []
     const queue = [root]
+    let discovered = 0
     // Each document once per install, asked for as soon as a package needing it is placed: the walk then rarely
     // waits on the network one document at a time
     const documents = new Map<string, Promise<Packument>>()
@@ -194,6 +252,8 @@ export class Installer {
         child.parent = parent
         parent.children.set(dep.alias, child)
         queue.push(child)
+        discovered++
+        if (onDiscovered && (discovered <= 5 || discovered % 5 === 0)) onDiscovered(discovered)
         prefetch(version)
       }
     }
@@ -312,6 +372,12 @@ let libcName: string | undefined
 function libc(): string {
   libcName ??= (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header?.glibcVersionRuntime ? 'glibc' : 'musl'
   return libcName
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 /** Stops at the first failure, but only rejects once the tasks under way are done: the caller deletes their directory */

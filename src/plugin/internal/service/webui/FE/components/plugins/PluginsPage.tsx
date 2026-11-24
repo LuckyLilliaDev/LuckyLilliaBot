@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PluginDetailsSource, PluginsViewProps } from '@luckylillia-dev/plugin-sdk/webui'
-import { ArrowLeft, ChevronLeft, ChevronRight, FileUp, Loader2, Puzzle, RefreshCw, Search, X } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { PluginCatalogItem, PluginDetailsSource, PluginsViewProps } from '@luckylillia-dev/plugin-sdk/webui'
+import { ArrowLeft, ChevronLeft, ChevronRight, FileUp, LayoutGrid, List, Loader2, Puzzle, RefreshCw, Search, X } from 'lucide-react'
 import { usePluginList } from '../../plugin-host/pluginList'
 import { SlotOutlet, useSettingsPages, useSlotContents } from '../../plugin-host/views'
 import { PluginBoundary } from '../../plugin-host/context'
@@ -12,23 +12,31 @@ import { getPluginDetails, reloadPlugin, removeMissingPlugin, scanPlugins, Trust
 import PluginCard from './PluginCard'
 import { findConflicts, pluginDescription, pluginTitle } from './meta'
 import { CATEGORIES, pageNumbers, paginate, type OriginFilter, type StatusFilter } from './listing'
-import { usePluginCatalog } from './catalog'
-import { filterPluginItems, isInstalled, itemCategory, itemName, mergePluginItems, type PluginFilters, type PluginListItem } from './unifiedListing'
+import { usePluginCatalog, type CatalogSource } from './catalog'
+import { filterPluginItems, isInstalled, itemCategory, itemName, mergePluginItems, planPluginJump, type PluginFilters, type PluginListItem } from './unifiedListing'
 import PluginConfigDialog from './PluginConfigDialog'
 import PluginDetailsDialog from './PluginDetailsDialog'
-import LocalInstallDialog from './LocalInstallDialog'
+import LocalInstallDialog, { type LocalInstalledPlugin } from './LocalInstallDialog'
 import TrustDialog from './TrustDialog'
 
 const errorText = (e: unknown) => e instanceof Error ? e.message : String(e)
-const PAGE_SIZE = 12
+const CARD_PAGE_SIZE = 12
+const LIST_PAGE_SIZE = 24
 const VIEW_KEY = 'llbot-plugins-browser'
+const LAYOUT_KEY = 'llbot-plugins-layout'
+type ListLayout = 'card' | 'list'
 interface View extends PluginFilters { mode: string; page: number }
-const DEFAULT_VIEW: View = { mode: 'list', installation: 'installed', category: 'all', status: 'all', origin: 'all', search: '', updatesOnly: false, page: 1 }
+const DEFAULT_VIEW: View = { mode: 'list', installation: 'all', category: 'all', status: 'all', origin: 'all', search: '', updatesOnly: false, page: 1 }
 function loadView(): View {
   try {
     const saved = JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? '{}')
-    return { ...DEFAULT_VIEW, ...saved, mode: 'list', installation: 'installed', page: 1, updatesOnly: false }
+    return { ...DEFAULT_VIEW, ...saved, mode: 'list', installation: 'all', page: 1, updatesOnly: false }
   } catch { return DEFAULT_VIEW }
+}
+function loadLayout(): ListLayout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'card'
+  } catch { return 'card' }
 }
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: '全部状态' }, { value: 'enabled', label: '已启用' },
@@ -51,6 +59,11 @@ const PluginsPage: React.FC = () => {
   const closeDetails = useCallback(() => setDetailsOf(null), [])
   const [trusting, setTrusting] = useState<{ plugin: PluginStatus; go: () => Promise<void> } | null>(null)
   const [view, setView] = useState<View>(loadView)
+  const [layout, setLayout] = useState<ListLayout>(loadLayout)
+  const cardRefs = useRef(new Map<string, HTMLDivElement>())
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [jumpTarget, setJumpTarget] = useState<{ name: string; nonce: number } | null>(null)
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
   const catalog = usePluginCatalog(view.installation !== 'installed')
   const refresh = useCallback(async () => {
     try {
@@ -60,7 +73,10 @@ const PluginsPage: React.FC = () => {
   }, [])
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => { sessionStorage.setItem(VIEW_KEY, JSON.stringify(view)) }, [view])
+  useEffect(() => { try { localStorage.setItem(LAYOUT_KEY, layout) } catch {} }, [layout])
+  useEffect(() => () => { if (highlightTimer.current) clearTimeout(highlightTimer.current) }, [])
   const update = (patch: Partial<View>) => setView(previous => ({ ...previous, page: 1, ...patch }))
+  const pageSize = layout === 'list' ? LIST_PAGE_SIZE : CARD_PAGE_SIZE
 
   const added = useSlotContents('plugins.views')
   const addedView = added.find(c => contributionKey(c) === view.mode)
@@ -81,7 +97,40 @@ const PluginsPage: React.FC = () => {
   const checking = catalog.sources.some(source => source.state.checking || source.state.loadingInstalled)
   const packageBusy = catalog.sources.some(source => source.state.busy.length > 0)
   const updateCount = new Set(allItems.filter(item => item.updateInfo?.update).map(itemName)).size
-  const { items, page, pages } = paginate(shown, view.page, PAGE_SIZE)
+  const { items, page, pages } = paginate(shown, view.page, pageSize)
+  const jumpToPlugin = useCallback((name: string) => {
+    setItemOrder([])
+    setJumpTarget({ name, nonce: Date.now() })
+  }, [])
+  useEffect(() => {
+    if (!jumpTarget) return
+    const plan = planPluginJump(allItems, view, jumpTarget.name, pageSize)
+    if (!plan) {
+      if (plugins !== null) setJumpTarget(null)
+      return
+    }
+    const needsViewChange = mode !== 'list'
+      || page !== plan.page
+      || view.installation !== plan.filters.installation
+      || view.origin !== plan.filters.origin
+      || view.status !== plan.filters.status
+      || view.category !== plan.filters.category
+      || view.updatesOnly !== plan.filters.updatesOnly
+      || view.search !== plan.filters.search
+    if (needsViewChange) {
+      setView(previous => ({ ...previous, ...plan.filters, mode: 'list', page: plan.page }))
+      return
+    }
+    if (!items.some(item => item.key === plan.item.key)) return
+    setJumpTarget(null)
+    setHighlightedKey(plan.item.key)
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlightedKey(null), 2800)
+    const targetKey = plan.item.key
+    requestAnimationFrame(() => {
+      cardRefs.current.get(targetKey)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [jumpTarget, allItems, items, mode, page, pageSize, plugins, view])
   const conflicts = useMemo(() => findConflicts(plugins ?? []), [plugins])
   const settingsPages = useSettingsPages()
   const contributions = useRegistry(state => state.contributions)
@@ -137,11 +186,17 @@ const PluginsPage: React.FC = () => {
     try {
       const { added, removed } = await scanPlugins()
       const parts = [added.length && `新增 ${added.length} 个`, removed.length && `移除 ${removed.length} 个`].filter(Boolean)
-      showToast(parts.length ? `扫描完成：${parts.join('，')}` : '扫描完成，没有变化', 'success')
       await refresh()
+      setItemOrder([])
       for (const source of catalog.sources) source.state.refresh()
       setInstallingLocal(false)
       update({ installation: 'installed', search: '', category: 'all', status: 'all', origin: 'all', updatesOnly: false })
+      showToast(
+        parts.length ? `扫描完成：${parts.join('，')}` : '扫描完成，没有变化',
+        'success',
+        added.length ? 8000 : 3000,
+        added.length ? { label: '定位到插件', onClick: () => jumpToPlugin(added[0]) } : undefined,
+      )
     } catch (e) { showToast(`扫描失败：${errorText(e)}`, 'error') }
     finally { setScanning(false) }
   }
@@ -162,21 +217,59 @@ const PluginsPage: React.FC = () => {
     try { if (await action()) await refresh() }
     catch (e) { showToast(errorText(e), 'error') }
   }
+  const installFromCatalog = async (source: CatalogSource, entry: PluginCatalogItem, reinstall: boolean) => {
+    if (scanning) return
+    try {
+      if (!await source.state.install(entry.name, entry.version)) return
+      await refresh()
+      setItemOrder([])
+      const label = entry.title || entry.name
+      showToast(
+        `${reinstall ? '已重新安装' : '已安装'}「${label}」${reinstall ? '' : '（默认未启用）'}`,
+        'success',
+        8000,
+        { label: '定位到插件', onClick: () => jumpToPlugin(entry.name) },
+      )
+    } catch (e) { showToast(errorText(e), 'error') }
+  }
+  const handleLocalInstalled = (installed?: LocalInstalledPlugin) => {
+    setInstallingLocal(false)
+    void refresh().then(() => {
+      setItemOrder([])
+      if (!installed) return
+      const label = installed.title || installed.name
+      showToast(
+        installed.updated
+          ? `已更新「${label}」${installed.version ? `至 v${installed.version}` : ''}`
+          : `已安装「${label}」（默认未启用）`,
+        'success',
+        8000,
+        { label: '定位到插件', onClick: () => jumpToPlugin(installed.name) },
+      )
+    })
+  }
   const card = (item: PluginListItem) => {
     const { plugin, source, packageStatus, catalog: entry, updateInfo } = item
     const gear = plugin ? configure(plugin) : {}
     const ready = !!source?.state.installed && !source.state.installedError
     const name = itemName(item)
     return <PluginCard key={item.key} plugin={plugin} catalog={entry} packageStatus={packageStatus} updateInfo={updateInfo}
+      cardRef={el => {
+        if (el) cardRefs.current.set(item.key, el)
+        else cardRefs.current.delete(item.key)
+      }}
+      highlighted={highlightedKey === item.key}
       instanceTag={plugin && (countByName.get(plugin.name) ?? 0) > 1 ? `#${plugin.id}` : undefined}
       conflicts={plugin && conflicts.get(plugin.id)}
-      busy={!!(plugin && busy.has(plugin.id)) || packageBusy || scanning}
+      busy={!!(plugin && busy.has(plugin.id)) || scanning}
       entryBusy={plugin && busy.has(plugin.id)}
-      packageBusy={source?.state.busy.includes(name)}
+      packageBusy={!!source?.state.busy.includes(name)}
+      progress={source?.state.progress?.[name]}
+      layout={layout}
       onToggle={plugin ? enabled => { void toggle(plugin, enabled) } : undefined}
       onConfigure={gear.open} configureLabel={gear.label}
       onReload={plugin ? () => { void reload(plugin) } : undefined}
-      onInstall={(!isInstalled(item) || (plugin?.state === 'missing' && !packageStatus)) && entry && ready ? () => { void packageAction(() => source!.state.install(entry.name, entry.version)) } : undefined}
+      onInstall={(!isInstalled(item) || (plugin?.state === 'missing' && !packageStatus)) && entry && ready ? () => { void installFromCatalog(source!, entry, plugin?.state === 'missing') } : undefined}
       onUpdate={packageStatus?.managed && updateInfo?.update && ready ? () => { void packageAction(() => source!.state.update(name)) } : undefined}
       onUninstall={plugin?.state === 'missing' && !plugin.builtin && !plugin.core
         ? keepConfig => { void removeMissing(plugin, keepConfig) }
@@ -204,7 +297,7 @@ const PluginsPage: React.FC = () => {
             <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap sm:items-center gap-3">
               <div className="flex items-start gap-3" role="group" aria-label="插件安装状态">
                 <span className="w-8 shrink-0 py-1.5 text-xs sm:text-sm text-theme-muted">安装</span>
-                <div className="flex flex-wrap gap-1">{([['installed', '已安装'], ['uninstalled', '未安装'], ['all', '全部插件']] as const).map(([value, label]) => (
+                <div className="flex flex-wrap gap-1">{([['all', '全部插件'], ['installed', '已安装'], ['uninstalled', '未安装']] as const).map(([value, label]) => (
                   <button key={value} type="button" aria-pressed={view.installation === value}
                     onClick={() => update({ installation: value, status: 'all', updatesOnly: false })} className={filterChoice(view.installation === value)}>
                     {label}{(value === 'installed' || catalogLoaded) && <span className="ml-1.5 text-xs opacity-60">{installationCounts[value]}</span>}
@@ -213,9 +306,29 @@ const PluginsPage: React.FC = () => {
               </div>
               <div className="ml-auto flex max-w-full flex-wrap items-center gap-2">
                 <SlotOutlet name="plugins.toolbar" />
+                <div className="inline-flex items-center rounded-xl bg-theme-item p-0.5" role="group" aria-label="视图切换">
+                  <button
+                    type="button"
+                    onClick={() => { setLayout('card'); update({ page: 1 }) }}
+                    aria-pressed={layout === 'card'}
+                    title="卡片视图"
+                    className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${layout === 'card' ? 'bg-pink-500/15 text-pink-600 dark:text-pink-400 font-medium' : 'text-theme-muted hover:text-theme'}`}
+                  >
+                    <LayoutGrid size={15} /><span className="hidden sm:inline">卡片</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setLayout('list'); update({ page: 1 }) }}
+                    aria-pressed={layout === 'list'}
+                    title="列表视图"
+                    className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${layout === 'list' ? 'bg-pink-500/15 text-pink-600 dark:text-pink-400 font-medium' : 'text-theme-muted hover:text-theme'}`}
+                  >
+                    <List size={15} /><span className="hidden sm:inline">列表</span>
+                  </button>
+                </div>
                 {catalog.available && <button type="button" onClick={() => catalog.sources.forEach(source => source.state.refresh())} disabled={checking || packageBusy || !catalog.sources.length}
                   title="检查更新" className="btn-glass inline-flex items-center gap-1.5 text-sm"><RefreshCw size={16} className={checking ? 'animate-spin' : ''} /><span className="hidden sm:inline">检查更新</span></button>}
-                <button type="button" disabled={scanning || packageBusy} onClick={() => setInstallingLocal(true)} className="btn-primary inline-flex items-center gap-1.5 text-sm"><FileUp size={16} />本地安装</button>
+                <button type="button" disabled={scanning} onClick={() => setInstallingLocal(true)} className="btn-primary inline-flex items-center gap-1.5 text-sm"><FileUp size={16} />本地安装</button>
                 {added.map(c => <button key={contributionKey(c)} type="button" onClick={() => update({ mode: contributionKey(c) })} className="btn-glass text-sm">{titleOf(c)}</button>)}
               </div>
             </div>
@@ -258,7 +371,11 @@ const PluginsPage: React.FC = () => {
           {catalogLoading && <div className="flex items-center justify-center gap-2 py-4 text-sm text-theme-muted"><Loader2 size={18} className="animate-spin" />正在加载市场目录…</div>}
           {plugins === null && !listError ? <div className="flex justify-center py-12"><Loader2 size={32} className="animate-spin text-pink-500" /></div> : (
             <>
-              {shown.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{items.map(card)}</div> : !catalogLoading && (view.installation === 'installed' || (catalogLoaded && !catalog.sources.some(source => source.state.error))) && (
+              {shown.length > 0 ? (
+                layout === 'list'
+                  ? <div className="card divide-y divide-theme-divider overflow-hidden">{items.map(card)}</div>
+                  : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{items.map(card)}</div>
+              ) : !catalogLoading && (view.installation === 'installed' || !catalog.available || (catalogLoaded && !catalog.sources.some(source => source.state.error))) && (
                 <div className="card p-10 text-center"><Puzzle size={36} className="mx-auto text-theme-hint mb-3" /><p className="text-sm text-theme-secondary">{view.updatesOnly ? '暂无可更新的插件' : filtered ? '没有符合条件的插件' : view.installation === 'uninstalled' ? '当前目录没有未安装的插件' : '暂无插件'}</p>
                   {filtered && <div className="mt-4 flex flex-wrap justify-center gap-2">
                     {canSearchAll && <button type="button" onClick={searchAll} className="btn-primary text-sm">在全部插件中搜索</button>}
@@ -281,7 +398,7 @@ const PluginsPage: React.FC = () => {
           <PluginBoundary key={contributionKey(addedView)} owner={addedView.owner} failure={{ key: contributionKey(addedView), where: `插件页的「${titleOf(addedView)}」` }}><addedView.component configAction={configAction} showDetails={setDetailsOf} /></PluginBoundary>
         </>
       )}
-      {installingLocal && <LocalInstallDialog scanning={scanning} busy={packageBusy} onScan={scan} onClose={() => setInstallingLocal(false)} onInstalled={() => { setInstallingLocal(false); update({ installation: 'installed', search: '', category: 'all', status: 'all', origin: 'all', updatesOnly: false }); void refresh() }} />}
+      {installingLocal && <LocalInstallDialog scanning={scanning} busy={packageBusy} onScan={scan} onClose={() => setInstallingLocal(false)} onInstalled={handleLocalInstalled} />}
       {trusting && <TrustDialog plugin={trusting.plugin} onCancel={() => setTrusting(null)} onConfirm={() => { setTrusting(null); void trusting.go() }} />}
       {detailsOf && <PluginDetailsDialog source={detailsOf} onClose={closeDetails} />}
       {editing && <PluginConfigDialog plugin={editing} plugins={plugins ?? []} removable={(countByName.get(editing.name) ?? 0) > 1} onClose={() => setEditing(null)} />}

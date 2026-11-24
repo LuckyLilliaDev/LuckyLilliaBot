@@ -1,25 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, X, ArrowRight } from 'lucide-react';
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 
 interface ToastProps {
   message: string;
   type?: 'success' | 'error' | 'warning';
   duration?: number;
+  action?: ToastAction;
   onClose: () => void;
 }
 
-const Toast: React.FC<ToastProps> = ({ message, type = 'success', duration = 3000, onClose }) => {
+const Toast: React.FC<ToastProps> = ({ message, type = 'success', duration = 3000, action, onClose }) => {
   const [isVisible, setIsVisible] = useState(true);
+  const [hovered, setHovered] = useState(false);
+  const closingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const dismiss = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setIsVisible(false);
+    setTimeout(() => onCloseRef.current(), 300);
+  }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(false);
-      setTimeout(onClose, 300);
-    }, duration);
-
+    if (hovered) return;
+    const timer = setTimeout(dismiss, duration);
     return () => clearTimeout(timer);
-  }, [duration, onClose]);
+  }, [duration, hovered, dismiss]);
 
   const icons = {
     success: <CheckCircle className="w-5 h-5" />,
@@ -36,18 +50,32 @@ const Toast: React.FC<ToastProps> = ({ message, type = 'success', duration = 300
 
   return (
     <div
-      className={`fixed top-4 right-4 flex items-center gap-3 px-4 py-3 glass glass-thick r-card text-theme transition-all duration-300 ${
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 glass glass-thick r-card text-theme transition-all duration-300 ${
         isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
       }`}
-      style={{ minWidth: '300px', maxWidth: '500px', zIndex: 99999 }}
+      style={{ minWidth: '300px', maxWidth: '520px' }}
     >
       <div className={`flex-shrink-0 ${iconColor[type]}`}>{icons[type]}</div>
-      <p className="flex-1 text-sm font-medium">{message}</p>
+      <p className="flex-1 text-sm font-medium break-words">{message}</p>
+      {action && (
+        <button
+          type="button"
+          onClick={() => {
+            action.onClick();
+            dismiss();
+          }}
+          className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-pink-600 dark:text-pink-400 bg-pink-500/10 hover:bg-pink-500/20 whitespace-nowrap transition-colors"
+        >
+          {action.label}
+          <ArrowRight size={13} />
+        </button>
+      )}
       <button
-        onClick={() => {
-          setIsVisible(false);
-          setTimeout(onClose, 300);
-        }}
+        type="button"
+        onClick={dismiss}
+        aria-label="关闭提示"
         className="flex-shrink-0 text-theme-muted hover:text-theme transition-colors"
       >
         <X size={18} />
@@ -61,6 +89,7 @@ interface ToastItem {
   message: string;
   type: 'success' | 'error' | 'warning';
   duration?: number;
+  action?: ToastAction;
 }
 
 let toastId = 0;
@@ -71,9 +100,14 @@ const notifyListeners = () => {
   toastListeners.forEach(listener => listener([...toasts]));
 };
 
-export const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success', duration = 3000) => {
+export const showToast = (
+  message: string,
+  type: 'success' | 'error' | 'warning' = 'success',
+  duration?: number,
+  action?: ToastAction,
+) => {
   const id = toastId++;
-  toasts.push({ id, message, type, duration });
+  toasts.push({ id, message, type, duration: duration ?? (action ? 8000 : 3000), action });
   notifyListeners();
 };
 
@@ -95,18 +129,18 @@ export const ToastContainer: React.FC = () => {
   };
 
   const content = (
-    <>
-      {toastList.map((toast, index) => (
-        <div key={toast.id} style={{ top: `${1 + index * 4.5}rem`, zIndex: 99999 }} className="fixed right-4">
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            duration={toast.duration}
-            onClose={() => removeToast(toast.id)}
-          />
-        </div>
+    <div className="fixed top-4 right-4 z-[99999] flex flex-col items-end gap-2.5 pointer-events-none max-w-[calc(100vw-2rem)]">
+      {toastList.map(toast => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          action={toast.action}
+          onClose={() => removeToast(toast.id)}
+        />
       ))}
-    </>
+    </div>
   );
 
   return createPortal(content, document.body);
