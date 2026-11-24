@@ -1,6 +1,13 @@
 import path from 'node:path'
 import { installHostLifecycle } from './hostLifecycle'
-import { startupPluginNames, startupPluginError, startRequestedPlugins } from './startupPlugins'
+import {
+  redactStartupArgv,
+  startupPluginConfigs,
+  startupPluginError,
+  startupPluginNames,
+  startRequestedPlugins,
+  type StartupPluginConfig,
+} from './startupPlugins'
 
 import Log from './log'
 import { Config as LLBotConfig } from '../common/types'
@@ -72,8 +79,10 @@ async function onLoad() {
     process.exit(1)
   }
   let requestedPlugins: string[]
+  let requestedConfigs: StartupPluginConfig[]
   try {
     requestedPlugins = startupPluginNames()
+    requestedConfigs = startupPluginConfigs()
   } catch (error) {
     return startupFailed(error)
   }
@@ -116,7 +125,7 @@ async function onLoad() {
   // The settings are the instance's, fixed at startup: applied now and watched from here on
   ctx.inject(['config'], (ctx) => {
     ctx.logger.info(`LLBot ${version}`)
-    ctx.logger.info(process.argv)
+    ctx.logger.info(redactStartupArgv(process.argv))
     const config = ctx.config.get()
     setConfigLogLevel(config.logLevel)
     applyLogLevel(ctx)
@@ -128,10 +137,10 @@ async function onLoad() {
     ctx.parallel('llob/config-updated', config)
   })
 
-  if (requestedPlugins.length) {
+  if (requestedPlugins.length || requestedConfigs.length) {
     try {
       await plugins
-      await startRequestedPlugins(ctx, requestedPlugins)
+      await startRequestedPlugins(ctx, requestedPlugins, undefined, requestedConfigs)
     } catch (error) {
       return startupFailed(error)
     }

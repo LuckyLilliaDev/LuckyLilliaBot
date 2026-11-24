@@ -8,6 +8,7 @@ import type { LLBotManifest } from '@luckylillia-dev/plugin-sdk'
 import type Schema from 'schemastery'
 import { hydrate, SchemaNode } from '@/common/schema/model'
 import { stripDefaults, withDefaults } from '@/common/schema/diff'
+import { applyConfigPatches, type ConfigPatch } from '@/common/schema/patch'
 import {
   isImagePath, isInside, matchesPluginVersion, normalizeService, PluginAuthor, PluginPackage, readPluginPackage, scanPluginRoots, SDK_PACKAGE, sdkRangeOf,
   sdkIncompatibility, ServiceDeclaration,
@@ -593,15 +594,16 @@ class PluginService extends Service {
     return this.lock(SCAN_LOCK, () => this.rescan())
   }
 
-  async add(name: string, config?: unknown, options: { trust?: boolean } = {}): Promise<PluginStatus> {
+  async add(name: string, config?: unknown, options: { trust?: boolean; disabled?: boolean } = {}): Promise<PluginStatus> {
     if (this.builtins.has(name)) throw new PluginForbiddenError(`${name} is builtin and runs as a single instance`)
     return this.lock(name, async () => {
       if (!this.packages.has(name)) throw new PluginNotFoundError(`no plugin package named ${name}`)
       this.assertTrusted(name, options.trust)
-      const rt = this.createEntry(name, false, config)
+      const disabled = !!options.disabled
+      const rt = this.createEntry(name, disabled, config)
       await this.save()
       this.changed()
-      await this.start(rt)
+      if (!disabled) await this.start(rt)
       return this.status(rt)
     })
   }
@@ -790,6 +792,33 @@ class PluginService extends Service {
       if (fiber) {
         rt.error = undefined
         // A failing apply() is reported through the fiber state, not thrown here
+        await Promise.resolve(fiber.update(rt.entry.config, true)).catch(() => {})
+        await fiber.await().catch(() => {})
+      }
+      return this.status(rt)
+    })
+  }
+
+  /**
+   * Applies partial CLI/programmatic patches onto the stored effective config (preserving untouched secrets and
+   * fields), validates with the plugin's schema and rules, persists to plugins.json and updates a running fiber.
+   */
+  async patchConfig(
+    id: string, patches: readonly ConfigPatch[], options: { rules?: boolean; enabled?: boolean } = {},
+  ): Promise<PluginStatus> {
+    const rt = this.runtime(id)
+    this.assertConfigurable(rt)
+    return this.lock(rt.entry.name, async () => {
+      const Config = await this.configSchemaOf(rt, true)
+      const { node, defaults } = this.configModel(Config)
+      const stored = withDefaults(node, rt.entry.config ?? null, defaults)
+      const merged = applyConfigPatches(stored, node, patches)
+      const value = this.checked(rt, Config, merged, options.enabled ?? !this.isDisabled(rt), options.rules !== false)
+      rt.entry.config = stripDefaults(node, value, defaults)
+      await this.save()
+      const fiber = rt.fiber
+      if (fiber) {
+        rt.error = undefined
         await Promise.resolve(fiber.update(rt.entry.config, true)).catch(() => {})
         await fiber.await().catch(() => {})
       }

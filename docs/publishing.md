@@ -264,3 +264,35 @@ node llbot.js --instance second --plugin=@luckylillia-dev/plugin-nt-protocol,@lu
 - 参数产生的信任和启用状态会保存，之后去掉参数也不会撤销。
 
 Docker 镜像把参数直接写在镜像名之后：`docker run ... <镜像> --plugin @luckylillia-dev/plugin-nt-protocol`；Compose 写作 `command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]`。
+
+### 启动时传入插件配置
+
+可以用 `--plugin-config` 在启动时给内置插件或第三方 npm 插件写入配置，并自动安装（如尚未安装）与启用对应插件，无需再重复写 `--plugin`：
+
+```sh
+# 路径键值写法（推荐，免 JSON 转义，自动按插件 Schema 转换数字 / 布尔 / 数组类型）
+node llbot.js \
+  --plugin-config qq-official:appId=102000001 \
+  --plugin-config qq-official:secret=your_secret \
+  --plugin-config qq-official:sandbox=true
+
+# 多层嵌套对象与数组下标（支持任意层级，也可在子路径直接传局部 JSON/JSON5 对象合并）
+node llbot.js \
+  --plugin-config ntqq-offline-email:smtp.host=smtp.gmail.com \
+  --plugin-config ntqq-offline-email:smtp.port=465 \
+  --plugin-config ntqq-offline-email:smtp.auth.user=bot@example.com \
+  --plugin-config "milky:http={port:3020}" \
+  --plugin-config onebot11:connect.0.url=ws://127.0.0.1:8080/onebot
+
+# JSON / JSON5 对象局部合并（未提及的字段保持原值）
+node llbot.js --plugin-config 'satori={"port":5500,"token":"abc"}'
+
+# 先配好代理再安装其它插件（proxy / market 会优先于 npm 插件安装生效）
+node llbot.js \
+  --plugin-config proxy:proxyAgent=http://127.0.0.1:7890 \
+  --plugin-config telegram-protocol:token=123456:ABC
+```
+
+- 插件名支持**短名**（如 `qq-official`、`proxy`、`satori`、`onebot11`、`milky`、`telegram-protocol`）、`builtin:<名称>` 及完整 npm 包名（如 `@luckylillia-dev/plugin-onebot11`）。
+- 同一插件可重复传多个 `--plugin-config`，按命令行顺序依次应用；配置会局部合并并持久化到实例的 `plugins.json`（保留未提及字段与已有密钥），并按插件 Schema 校验，字段名写错时会提示可用字段列表。
+- 启动日志会自动脱敏 `--plugin-config` 的值，避免泄露密钥或 Token。
