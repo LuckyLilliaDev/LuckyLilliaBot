@@ -104,6 +104,15 @@ async function save(file: string, value: unknown) {
   } finally { await rm(temporary, { force: true }).catch(() => {}) }
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH'
+  }
+}
+
 function request<T>(peer: Peer, call: Omit<Call, 'secret'>, timeout = RPC_TIMEOUT): Promise<T> {
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: '127.0.0.1', port: peer.port })
@@ -224,11 +233,12 @@ export class SharedPackages {
     this.closing = true
     if (this.timer) clearInterval(this.timer)
     await Promise.allSettled([...this.operations, ...this.requests.values()])
-    this.server?.close()
+    // Unregister before closing the listener so another peer never observes ECONNREFUSED on a closing file.
     for (const root of this.roots) {
       await rm(path.join(root, STATE, 'peers', `${this.id}.json`), { force: true }).catch(() => {})
       await rm(path.join(localPeerDirectory(root), `${this.id}.json`), { force: true }).catch(() => {})
     }
+    this.server?.close()
   }
 
   writable(root: string): boolean {
@@ -309,9 +319,7 @@ export class SharedPackages {
     return pending
   }
 
-  private async peers(root: string): Promise<Peer[]> {
-    const peers: Peer[] = []
-    const seen = new Set<string>()
+  private async peerFiles(root: string): Promise<string[]> {
     const files: string[] = []
     for (const dir of [path.join(root, STATE, 'peers'), localPeerDirectory(root)]) {
       for (const name of await readdir(dir).catch(error => {
@@ -319,7 +327,31 @@ export class SharedPackages {
         throw error
       })) if (name.endsWith('.json')) files.push(path.join(dir, name))
     }
-    for (const file of files) {
+    return files
+  }
+
+  private async removePeerFiles(root: string, id: string, file?: string) {
+    if (file) await rm(file, { force: true }).catch(() => {})
+    await rm(path.join(localPeerDirectory(root), `${id}.json`), { force: true }).catch(() => {})
+    await rm(path.join(root, STATE, 'peers', `${id}.json`), { force: true }).catch(() => {})
+  }
+
+  /** Fast local cleanup for peers whose OS process is already gone, avoiding stale file buildup across restarts. */
+  private async pruneExitedPeers(root: string) {
+    const seen = new Set<string>()
+    for (const file of await this.peerFiles(root)) {
+      const peer = await json<Peer>(file).catch(() => undefined)
+      if (!peer || peer.id === this.id || seen.has(peer.id)) continue
+      seen.add(peer.id)
+      if (peer.host !== hostname() || peer.environment !== this.peer?.environment) continue
+      if (!isProcessAlive(peer.pid)) await this.removePeerFiles(root, peer.id, file)
+    }
+  }
+
+  private async peers(root: string): Promise<Peer[]> {
+    const peers: Peer[] = []
+    const seen = new Set<string>()
+    for (const file of await this.peerFiles(root)) {
       const peer = await json<Peer>(file)
       if (!peer) continue
       if (seen.has(peer.id)) continue
@@ -328,17 +360,19 @@ export class SharedPackages {
         // A different container/host has a different kernel semaphore. Its absence cannot be proven here.
         throw new Error('插件目录仍登记了其他主机的实例；请停止原环境并清理其登记后重试，跨容器请使用独立插件目录')
       }
+      if (!isProcessAlive(peer.pid)) {
+        await this.removePeerFiles(root, peer.id, file)
+        continue
+      }
       try {
         if (await request(peer, { action: 'ping' }, 3000) !== peer.id) throw new Error('插件协调端点身份不匹配')
         peers.push(peer)
       } catch (error) {
-        // An unavailable endpoint is stale only if its recorded local process no longer exists.
-        let alive = true
-        try { process.kill(peer.pid, 0) } catch (error) { alive = (error as NodeJS.ErrnoException).code !== 'ESRCH' }
-        if (alive) throw error
-        await rm(file, { force: true })
-        await rm(path.join(localPeerDirectory(root), `${peer.id}.json`), { force: true }).catch(() => {})
-        await rm(path.join(root, STATE, 'peers', `${peer.id}.json`), { force: true }).catch(() => {})
+        // A live peer listens on 127.0.0.1:<port> from before registration until after unregistering; ECONNREFUSED
+        // on the same host/network namespace proves that peer is gone even if the OS reused its PID (e.g. Windows).
+        const refused = (error as NodeJS.ErrnoException)?.code === 'ECONNREFUSED'
+        if (!refused && isProcessAlive(peer.pid)) throw error
+        await this.removePeerFiles(root, peer.id, file)
       }
     }
     return peers
@@ -361,6 +395,7 @@ export class SharedPackages {
   private async recover(root: string) {
     await recoverPackageSwap(root)
     await cleanupRemovedPackages(root)
+    await this.pruneExitedPeers(root)
     const pending = await json<Pending>(path.join(root, STATE, 'pending.json'))
     if (!pending) return
     const target = scannedPackagePath(root, pending.change.directory ?? pending.change.name)

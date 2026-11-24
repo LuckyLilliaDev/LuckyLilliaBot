@@ -160,4 +160,30 @@ describe('shared plugin package processes', () => {
       await expect(readFile(path.join(root, '.llbot-packages', 'pending.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     })
   })
+
+  it('prunes stale peer registrations whose PID was reused by an unrelated process when the endpoint refuses connections', async () => {
+    const root = await directory()
+    const net = await import('node:net')
+    const closed = net.createServer()
+    await new Promise<void>(resolve => closed.listen(0, '127.0.0.1', resolve))
+    const closedPort = (closed.address() as net.AddressInfo).port
+    await new Promise<void>(resolve => closed.close(() => resolve()))
+
+    const local = new SharedPackages({ roots: [root], instance: 'writer', async prepare() {},
+      async finish() { return { status: 'unchanged', entries: [] } }, warn() {} })
+    coordinators.push(local)
+    await local.initialize(async () => {})
+
+    // Copy own host/environment and use the live current PID (simulating OS PID reuse) with a closed loopback port.
+    const own = JSON.parse(await readFile(path.join(root, '.llbot-packages', 'peers', `${local.id}.json`), 'utf8'))
+    const staleId = 'stale-reused-pid-peer'
+    const stalePeer = { ...own, id: staleId, secret: 'stale-secret', pid: process.pid, port: closedPort }
+    const staleFile = path.join(root, '.llbot-packages', 'peers', `${staleId}.json`)
+    await writeFile(staleFile, JSON.stringify(stalePeer))
+
+    const result = await local.exclusive(root, () => local.change({ root, name: 'example', kind: 'uninstall' }, async () => {}))
+    expect(result.instances).toHaveLength(1)
+    expect(result.instances[0].instance).toBe('writer')
+    await expect(readFile(staleFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
 })
