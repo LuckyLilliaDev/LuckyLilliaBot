@@ -1,19 +1,22 @@
 /**
  * How the arguments llbot.js was given are split between the manager and the instances it runs. The launchers
  * (desktop app, CLI, Docker) keep passing what they passed when each process was one instance.
+ *
+ * Only the bot's own arguments are known here. Anything else belongs to the plugins (a protocol plugin's login
+ * mode, `--plugin` to install one) and goes to the instance the launch names, as it did when that was the only one.
  */
 
 /** The manager's own: the WebUI port is the gateway's, the parent is the manager's */
 const MANAGER_VALUE = new Set(['--webui-port', '--parent-pid', '--instance'])
 
-/** Only for the instance the launch names (`--instance`, else the one `-q` picks, else default) */
-const TARGET_VALUE = new Set(['-q', '--qq', '-p', '--protocol', '--nativeqq-config', '--qq-path', '--cmd-whitelist', '--plugin', '--plugin-config'])
-const TARGET_FLAG = new Set(['--direct', '--nativeqq', '--dump-packets'])
+/** The bot's own settings for every instance; `--plugin-dir` takes a value */
+const SHARED_VALUE = new Set(['--plugin-dir'])
+const SHARED_FLAG = new Set(['--plugin-hmr', '--dev', '--debug'])
 
 export interface SplitArgs {
   /** `--webui-port`, if given and a valid port */
   webuiPort?: number
-  /** For the target instance only */
+  /** For the target instance only (`--instance`, else the one `-q` picks, else default) */
   target: string[]
   /** For every instance */
   shared: string[]
@@ -39,18 +42,18 @@ export function splitArgs(argv: readonly string[]): SplitArgs {
       }
       continue
     }
-    if (TARGET_VALUE.has(name)) {
-      result.target.push(arg)
-      if (!inline && takesNext(argv, i)) result.target.push(argv[++i])
+    if (SHARED_FLAG.has(name)) {
+      result.shared.push(arg)
       continue
     }
-    if (TARGET_FLAG.has(name)) {
-      result.target.push(arg)
+    if (SHARED_VALUE.has(name)) {
+      result.shared.push(arg)
+      if (!inline && takesNext(argv, i)) result.shared.push(argv[++i])
       continue
     }
-    result.shared.push(arg)
-    // A shared flag's value goes with it: `--plugin-dir <dir>`, `--cdn china`
-    if (!inline && (name === '--plugin-dir' || name === '--cdn') && takesNext(argv, i)) result.shared.push(argv[++i])
+    // Not the bot's: the target's, with the value that follows it (`-q 123`, `--plugin <name>`)
+    result.target.push(arg)
+    if (!inline && takesNext(argv, i)) result.target.push(argv[++i])
   }
   return result
 }

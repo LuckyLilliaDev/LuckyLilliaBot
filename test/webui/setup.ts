@@ -30,13 +30,6 @@ vi.mock('@/main/log', () => ({
 
 vi.mock('@/common/utils/environment', () => ({
   isDockerEnvironment: vi.fn(() => false),
-  isNativeQQMode: vi.fn(() => false),
-  getNativeQQTarget: vi.fn(() => null),
-  currentNativeQQTarget: vi.fn(() => ({ configPath: '', qqPath: '' })),
-  launchPins: vi.fn(() => ({})),
-  lockedProtocol: vi.fn(() => undefined),
-  getProtocol: vi.fn(() => 'linux'),
-  getAuthTokenPageUrl: vi.fn(() => 'https://auth.luckylillia.com'),
   isDevMode: vi.fn(() => false),
   getSpecifiedUin: vi.fn(() => undefined),
   getInstanceArg: vi.fn(() => undefined),

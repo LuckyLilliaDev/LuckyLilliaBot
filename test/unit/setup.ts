@@ -28,22 +28,10 @@ vi.mock('@/main/log', () => ({
   getLogCache: vi.fn(() => []),
 }))
 
-// getProtocol/getCdn/isDevMode 少了会让 direct-lib 在 import 期就炸 (appInfo -> getActiveProfile 直接读; native / config 读取 isDevMode)
+// isDevMode is read on import by the config service
 vi.mock('@/common/utils/environment', () => ({
   isDockerEnvironment: vi.fn(() => false),
-  isNativeQQMode: vi.fn(() => false),
-  getNativeQQTarget: vi.fn(() => null),
-  currentNativeQQTarget: vi.fn(() => ({ configPath: '', qqPath: '' })),
-  protocolPins: vi.fn(() => ({})),
-  launchPins: vi.fn(() => ({})),
-  resolveProtocolSelection: vi.fn((settings: unknown) => settings),
-  setProtocolSelection: vi.fn(),
-  lockProtocol: vi.fn(),
-  lockedProtocol: vi.fn(() => undefined),
   isDevMode: vi.fn(() => false),
-  getProtocol: vi.fn(() => 'linux'),
-  getCdn: vi.fn(() => 'cf'),
-  getAuthTokenPageUrl: vi.fn(() => 'https://auth.luckylillia.com'),
   getSpecifiedUin: vi.fn(() => undefined),
   getPluginDirs: vi.fn(() => []),
   isPluginHmr: vi.fn(() => false),

@@ -3,10 +3,10 @@ import { splitArgs } from '@/main/manager/args'
 
 describe('splitting the launch arguments between the manager and its instances', () => {
   it('keeps the WebUI port, the parent and the instance name for the manager', () => {
-    const split = splitArgs(['--webui-port', '3081', '--parent-pid=42', '--instance', 'bot2', '--cdn', 'china'])
+    const split = splitArgs(['--webui-port', '3081', '--parent-pid=42', '--instance', 'bot2'])
     expect(split.webuiPort).toBe(3081)
     expect(split.target).toEqual([])
-    expect(split.shared).toEqual(['--cdn', 'china'])
+    expect(split.shared).toEqual([])
   })
 
   it('reads the desktop app\'s arguments after --, and --webui-port=<p>', () => {
@@ -20,19 +20,19 @@ describe('splitting the launch arguments between the manager and its instances',
     expect(splitArgs(['--webui-port=70000']).webuiPort).toBeUndefined()
   })
 
-  it('gives what names one account to the target instance only, values included', () => {
+  it("gives what is not the bot's own to the target instance only, values included", () => {
     const split = splitArgs([
       '-q', '123', '--protocol=macos', '--direct', '--nativeqq-config', 'c.json', '--qq-path', 'QQ.exe',
-      '--plugin', '@a/b', '--plugin-config=qq-official:appId=1', '--dump-packets',
+      '--plugin', '@a/b', '--plugin-config=qq-official:appId=1', '--dump-packets', '--cdn', 'china', '--future-flag',
     ])
     expect(split.target).toEqual([
       '-q', '123', '--protocol=macos', '--direct', '--nativeqq-config', 'c.json', '--qq-path', 'QQ.exe',
-      '--plugin', '@a/b', '--plugin-config=qq-official:appId=1', '--dump-packets',
+      '--plugin', '@a/b', '--plugin-config=qq-official:appId=1', '--dump-packets', '--cdn', 'china', '--future-flag',
     ])
     expect(split.shared).toEqual([])
   })
 
-  it('gives every instance the rest, a plugin directory\'s value with it', () => {
+  it("gives every instance the bot's own settings, a plugin directory's value with it", () => {
     const split = splitArgs(['--plugin-dir', '../plugins', '--plugin-hmr', '--debug', '--plugin-dir=x'])
     expect(split.shared).toEqual(['--plugin-dir', '../plugins', '--plugin-hmr', '--debug', '--plugin-dir=x'])
   })
