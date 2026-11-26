@@ -11,12 +11,24 @@
 export type PluginCategory = 'protocol' | 'adapter' | 'chat' | 'tool' | 'service' | 'theme' | 'other'
 
 /**
- * A launch flag (`llbot.args`) or environment variable (`llbot.env`) of a plugin: the config field its value goes to, as a path such as `port` or
- * `http.port`. A path segment `name[key=value]` picks the first item of the list `name` whose `key` is `value`,
- * adding `{ key: value }` when there is none, e.g. `connect[type=ws].port`.
+ * A setting a plugin takes at launch (`llbot.launch`), from a flag, an environment variable or both, e.g.
+ * `{ field: 'port', arg: '--satori-port', env: 'SATORI_PORT' }`: `--satori-port=5500`, `--satori-port 5500` or
+ * `SATORI_PORT=5500` saves 5500 as the entry's `port`, as `--plugin-config` would, and enables the plugin.
  */
-export type PluginArg = string | {
-  path: string
+export interface LaunchSetting {
+  /**
+   * The config field the value goes to, as a path such as `port` or `http.port`. A segment `name[key=value]` picks
+   * the first item of the list `name` whose `key` is `value`, adding `{ key: value }` when there is none, e.g.
+   * `connect[type=ws].port`.
+   */
+  field: string
+  /** The flag: `--` and lower case letters, digits and `-`, none of LLBot's own (`--plugin*`, `--instance`, ...). */
+  arg?: string
+  /**
+   * The environment variable: upper case letters, digits and `_`, not LLBot's (`LLBOT_*`), Node's or the system's.
+   * An empty one counts as unset; a flag wins over a variable for the same field.
+   */
+  env?: string
   /** What given values stand for in the config, e.g. `{ native: 'nativeqq' }`; others go as they are. */
   values?: Record<string, string>
   /** Other fields it sets as well, by path, e.g. `{ 'connect[type=ws].enable': true }`. */
@@ -76,16 +88,6 @@ export interface LLBotManifest {
    * WebUI build in a folder of its own.
    */
   webui?: string
-  /**
-   * Launch flags that write the plugin's settings, e.g. `{ "--satori-port": "port" }`: `--satori-port=5500` (or
-   * `--satori-port 5500`) at launch saves 5500 as the entry's `port`, as `--plugin-config` would, and enables the
-   * plugin. Only installed plugins' flags are known; a flag name must not be one of LLBot's own.
-   */
-  args?: Record<string, PluginArg>
-  /**
-   * Environment variables that write the plugin's settings the same way, e.g. `{ "SATORI_PORT": "port" }`: set at
-   * launch (a compose file's `environment:`), `SATORI_PORT=5500` saves 5500 as the entry's `port`. An empty one counts
-   * as unset; a flag from `args` wins over a variable for the same field. Upper case, and not LLBot's own (`LLBOT_*`).
-   */
-  env?: Record<string, PluginArg>
+  /** Settings taken at launch from flags and environment variables; only installed plugins' are known. */
+  launch?: LaunchSetting[]
 }

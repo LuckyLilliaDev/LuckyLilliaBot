@@ -2,8 +2,8 @@ import path from 'node:path'
 import { installHostLifecycle } from './hostLifecycle'
 import {
   redactStartupArgv,
-  pluginArgSources,
-  startupPluginArgs,
+  pluginLaunchSources,
+  startupLaunchSettings,
   startupPluginConfigs,
   startupPluginError,
   startupPluginNames,
@@ -141,12 +141,12 @@ async function onLoad() {
     ctx.parallel('llob/config-updated', config)
   })
 
-  // The launch flags and variables installed plugins declare (llbot.args, llbot.env) are only known once the plugin
-  // service has scanned them
+  // The launch flags and variables installed plugins declare (llbot.launch) are only known once the plugin service
+  // has scanned them
   try {
     await plugins
     // What --plugin-config says goes last, so it wins over a plugin's own flag or variable for the same field
-    const declared = startupPluginArgs(pluginArgSources(ctx), process.argv, message => ctx.logger('startup-plugins').warn(message))
+    const declared = startupLaunchSettings(pluginLaunchSources(ctx), process.argv, message => ctx.logger('startup-plugins').warn(message))
     await startRequestedPlugins(ctx, requestedPlugins, undefined, [...declared, ...requestedConfigs])
   } catch (error) {
     return startupFailed(error)

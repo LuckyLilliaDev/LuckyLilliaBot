@@ -56,7 +56,7 @@ my-plugin/
 - `main` 或 `exports["."]` 指向后端入口。ESM 的 `.js` 文件需要 `"type": "module"`。
 - SDK 的 `peerDependencies` 用于兼容性检查。插件包依赖和服务依赖的声明见[依赖与提供的服务](basics.md#依赖与提供的服务)。
 - `llbot.hidden` 从 WebUI 列表隐藏条目，`llbot.preview` 显示开发中标记，两者都不是权限设置。
-- `llbot.args` 和 `llbot.env` 声明写入配置的启动参数和环境变量，见[声明启动参数和环境变量](#声明启动参数和环境变量)。
+- `llbot.launch` 声明写入配置的启动参数和环境变量，见[声明启动参数和环境变量](#声明启动参数和环境变量)。
 
 ### 分类
 
@@ -302,26 +302,22 @@ node llbot.js \
 
 ### 声明启动参数和环境变量
 
-`--plugin-config` 要写出插件名和字段路径。插件可以在 `llbot.args` 和 `llbot.env` 里声明更短的启动参数和环境变量，宿主启动时把它们的值写进配置，效果和对应的 `--plugin-config` 一样：
+`--plugin-config` 要写出插件名和字段路径。插件可以在 `llbot.launch` 里为配置字段声明更短的启动参数和环境变量，宿主启动时把它们的值写进配置，效果和对应的 `--plugin-config` 一样：
 
 ```json
 "llbot": {
-  "args": {
-    "--satori-port": "port",
-    "--ntqq-mode": { "path": "mode", "values": { "native": "nativeqq" } },
-    "--onebot-ws-port": { "path": "connect[type=ws].port", "set": { "connect[type=ws].enable": true } }
-  },
-  "env": {
-    "SATORI_PORT": "port",
-    "NTQQ_MODE": { "path": "mode", "values": { "native": "nativeqq" } }
-  }
+  "launch": [
+    { "field": "port", "arg": "--satori-port", "env": "SATORI_PORT" },
+    { "field": "mode", "arg": "--ntqq-mode", "env": "NTQQ_MODE", "values": { "native": "nativeqq" } },
+    { "field": "connect[type=ws].port", "arg": "--onebot-ws-port", "set": { "connect[type=ws].enable": true } }
+  ]
 }
 ```
 
-这样 `--satori-port=5500`、`--satori-port 5500` 和环境变量 `SATORI_PORT=5500` 都会把 5500 写进 Satori 的 `port`。
+这样 `--satori-port=5500`、`--satori-port 5500` 和环境变量 `SATORI_PORT=5500` 都会把 5500 写进 Satori 的 `port`。每项对应一个配置字段，`arg` 和 `env` 至少写一个。
 
-- 值是字段路径，写法和 `--plugin-config` 相同，`name[key=value]` 选中列表里第一个 `key` 为 `value` 的项，没有就新增一项。
-- 写成对象时，`values` 把给出的值换成配置里的值，没列出的原样写入；`set` 同时写入其他字段，例如顺带启用这条连接。
+- `field` 是字段路径，写法和 `--plugin-config` 相同，`name[key=value]` 选中列表里第一个 `key` 为 `value` 的项，没有就新增一项。
+- `values` 把给出的值换成配置里的值，没列出的原样写入；`set` 同时写入其他字段，例如顺带启用这条连接。
 - 和 `--plugin-config` 一样，写入的配置会保存，插件会被信任并启用。
 - 先应用环境变量，再按命令行顺序应用参数，最后应用 `--plugin-config`，同一字段以后写的为准。值为空的环境变量当作没设置，方便 Compose 里留空。
 - 只认已安装插件的声明：插件还没装时，这些参数和变量没有效果，要另外加 `--plugin <包名>` 安装。

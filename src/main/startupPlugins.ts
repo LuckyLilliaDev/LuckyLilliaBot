@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs'
 import { Context } from 'cordis'
 import { isPlainObject } from '@/common/schema/diff'
 import { parseJsonLike, type ConfigPatch } from '@/common/schema/patch'
-import type { PluginArg } from '@luckylillia-dev/plugin-sdk'
+import type { LaunchSetting } from '@luckylillia-dev/plugin-sdk'
 import type { PluginStatus } from '@/plugin/host'
 import { currentPackageName, RENAMED_PACKAGES } from '@/plugin/host/renamed'
 import { Market } from '@/plugin/internal/tool/market/index'
@@ -132,25 +132,24 @@ export function startupPluginConfigs(argv: readonly string[] = process.argv): St
   return configs
 }
 
-/** LLBot's own flags, which no plugin may declare in `llbot.args`; every `--plugin*` flag is LLBot's as well. */
+/** LLBot's own flags, which no plugin may declare in `llbot.launch`; every `--plugin*` flag is LLBot's as well. */
 const HOST_FLAGS = new Set(['--instance', '--webui-port', '--parent-pid', '--dev', '--debug', '--no-supervisor', '--no-manager'])
 const ARG_NAME = /^--[a-z0-9][a-z0-9-]*$/
-/** Variables no plugin may declare in `llbot.env`: LLBot's own (`LLBOT_*`), Node's and npm's, and the system's. */
+/** Variables no plugin may declare: LLBot's own (`LLBOT_*`), Node's and npm's, and the system's. */
 const HOST_ENV_PREFIXES = ['LLBOT_', 'NODE_', 'NPM_', 'npm_']
 const SYSTEM_ENV = new Set(['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'LANG', 'TZ', 'TMP', 'TEMP', 'TMPDIR', 'PWD', 'HOSTNAME'])
 const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
 
-/** Who declares launch flags and variables: a builtin by its entry (`builtin:satori`), a package by its name. */
-export interface PluginArgSource {
+/** Who declares launch settings (`llbot.launch`): a builtin by its entry (`builtin:satori`), a package by its name. */
+export interface PluginLaunchSource {
   target: string
-  args?: unknown
-  env?: unknown
+  launch: unknown
 }
 
-type Declared = Map<string, { target: string; arg: PluginArg } | { problem: string }>
+type Declared = Map<string, { target: string; setting: LaunchSetting } | { problem: string }>
 
 interface Kind {
-  field: 'args' | 'env'
+  key: 'arg' | 'env'
   /** 参数 / 环境变量 */
   noun: string
   /** Why a plugin cannot have this name at all: it is never the plugin's, whoever uses it. */
@@ -158,52 +157,54 @@ interface Kind {
 }
 
 const FLAGS: Kind = {
-  field: 'args',
+  key: 'arg',
   noun: '参数',
   nameProblem: flag => !ARG_NAME.test(flag) ? '参数名只能是 --小写字母、数字和 -'
     : flag.startsWith('--plugin') || HOST_FLAGS.has(flag) ? '和 LLBot 自己的参数重名' : undefined,
 }
 
 const VARIABLES: Kind = {
-  field: 'env',
+  key: 'env',
   noun: '环境变量',
   nameProblem: name => !ENV_NAME.test(name) ? '变量名只能是大写字母、数字和 _'
     : HOST_ENV_PREFIXES.some(prefix => name.startsWith(prefix)) || SYSTEM_ENV.has(name) ? '是 LLBot 或系统自己的变量' : undefined,
 }
 
-function argProblem(arg: unknown): string | undefined {
-  const spec = typeof arg === 'string' ? { path: arg } : arg
-  if (!isPlainObject(spec) || typeof spec.path !== 'string' || !spec.path.trim()) return '要写出对应的配置字段'
-  if (spec.values !== undefined && (!isPlainObject(spec.values) || Object.values(spec.values).some(v => typeof v !== 'string'))) {
+/** What is wrong with a `llbot.launch` item, apart from its names. */
+function settingProblem(setting: Record<string, unknown>): string | undefined {
+  if (typeof setting.field !== 'string' || !setting.field.trim()) return '要用 field 写出对应的配置字段'
+  if (setting.arg === undefined && setting.env === undefined) return '要写出 arg 或 env'
+  const { values, set } = setting
+  if (values !== undefined && (!isPlainObject(values) || Object.values(values).some(v => typeof v !== 'string'))) {
     return 'values 要是 { 给出的值: 配置里的值 }'
   }
-  if (spec.set !== undefined && (!isPlainObject(spec.set)
-    || Object.values(spec.set).some(v => !['string', 'number', 'boolean'].includes(typeof v)))) {
+  if (set !== undefined && (!isPlainObject(set) || Object.values(set).some(v => !['string', 'number', 'boolean'].includes(typeof v)))) {
     return 'set 要是 { 字段: 值 }'
   }
 }
 
 /**
- * What the plugins declare of one kind. A declaration that is invalid, or a name two plugins declare, is only a
- * warning until it is used; a name a plugin may not have at all is dropped.
+ * The flags or the variables the plugins declare. An item that is invalid, or a name two plugins declare, is only a
+ * warning until the name is used; a name a plugin may not have at all is dropped.
  */
-function declarations(sources: readonly PluginArgSource[], kind: Kind, warn: (message: string) => void): Declared {
+function declarations(sources: readonly PluginLaunchSource[], kind: Kind, warn: (message: string) => void): Declared {
   const declared: Declared = new Map()
-  for (const source of sources) {
-    const { target } = source
-    const list = source[kind.field]
-    if (list === undefined) continue
-    if (!isPlainObject(list)) {
-      warn(`${target} 的 llbot.${kind.field} 要是 { ${kind.noun}名: 配置字段 }，已忽略`)
-      continue
-    }
-    for (const [name, arg] of Object.entries(list)) {
+  for (const { target, launch } of sources) {
+    if (!Array.isArray(launch)) continue
+    for (const item of launch) {
+      if (!isPlainObject(item)) continue
+      const name = item[kind.key]
+      if (name === undefined) continue
+      if (typeof name !== 'string') {
+        warn(`${target} 的 llbot.launch 里 ${kind.key} 要是字符串，已忽略`)
+        continue
+      }
       const badName = kind.nameProblem(name)
       if (badName) {
         warn(`${target} 声明的${kind.noun} ${name} 无效（${badName}），已忽略`)
         continue
       }
-      const problem = argProblem(arg)
+      const problem = settingProblem(item)
       const other = declared.get(name)
       if (problem) {
         warn(`${target} 声明的${kind.noun} ${name} 无效（${problem}），已忽略`)
@@ -213,7 +214,7 @@ function declarations(sources: readonly PluginArgSource[], kind: Kind, warn: (me
         warn(message)
         declared.set(name, { problem: message })
       } else if (!other || 'target' in other) {
-        declared.set(name, { target, arg: arg as PluginArg })
+        declared.set(name, { target, setting: item as unknown as LaunchSetting })
       }
     }
   }
@@ -228,30 +229,31 @@ function pathPatch(target: string, fieldPath: string, raw: string, name: string)
   return { plugin: target, patch: { kind: 'set', path: segments, raw } }
 }
 
-/** The settings one given value writes: its field, then what the declaration sets along with it. */
-function patchesOf(found: { target: string; arg: PluginArg }, raw: string, name: string): StartupPluginConfig[] {
-  const spec = typeof found.arg === 'string' ? { path: found.arg } : found.arg
+/** The settings one given value writes: its field, then what the item sets along with it. */
+function patchesOf({ target, setting }: { target: string; setting: LaunchSetting }, raw: string, name: string): StartupPluginConfig[] {
   return [
-    pathPatch(found.target, spec.path, spec.values?.[raw] ?? raw, name),
-    ...Object.entries(spec.set ?? {}).map(([field, value]) => pathPatch(found.target, field, String(value), name)),
+    pathPatch(target, setting.field, setting.values?.[raw] ?? raw, name),
+    ...Object.entries(setting.set ?? {}).map(([field, value]) => pathPatch(target, field, String(value), name)),
   ]
 }
 
 /**
- * The settings that the launch flags (`llbot.args`) and environment variables (`llbot.env`) installed plugins declare
- * write, as `--plugin-config` would: the variables first, then the flags in command-line order, so a flag wins over a
- * variable for the same field. A flag or variable nobody declares is left alone: LLBot or a plugin may read it itself.
- * An empty variable counts as unset, as `NAME=` in a compose file whose value is not given.
+ * The settings that the launch flags and environment variables installed plugins declare (`llbot.launch`) write, as
+ * `--plugin-config` would: the variables first, then the flags in command-line order, so a flag wins over a variable
+ * for the same field. A flag or variable nobody declares is left alone: LLBot or a plugin may read it itself. An empty
+ * variable counts as unset, as `NAME=` in a compose file whose value is not given.
  */
-export function startupPluginArgs(
-  sources: readonly PluginArgSource[],
+export function startupLaunchSettings(
+  sources: readonly PluginLaunchSource[],
   argv: readonly string[] = process.argv,
   warn: (message: string) => void = () => {},
   env: NodeJS.ProcessEnv = process.env,
 ): StartupPluginConfig[] {
   const configs: StartupPluginConfig[] = []
-  const variables = declarations(sources, VARIABLES, warn)
-  for (const [name, found] of variables) {
+  for (const sourceProblem of sources.filter(source => source.launch !== undefined && !Array.isArray(source.launch))) {
+    warn(`${sourceProblem.target} 的 llbot.launch 要是列表，已忽略`)
+  }
+  for (const [name, found] of declarations(sources, VARIABLES, warn)) {
     const raw = env[name]
     if (raw === undefined || !raw.trim()) continue
     if ('problem' in found) throw new Error(found.problem)
@@ -278,20 +280,17 @@ export function startupPluginArgs(
   return configs
 }
 
-/** The launch flags and variables the plugins found declare, for startupPluginArgs(). */
-export function pluginArgSources(ctx: Context): PluginArgSource[] {
-  const sources = new Map<string, PluginArgSource>()
-  const add = (target: string, manifest: { args?: unknown; env?: unknown }) => {
-    if (manifest.args !== undefined || manifest.env !== undefined) sources.set(target, { target, args: manifest.args, env: manifest.env })
-  }
+/** The launch settings the plugins found declare, for startupLaunchSettings(). */
+export function pluginLaunchSources(ctx: Context): PluginLaunchSource[] {
+  const sources = new Map<string, PluginLaunchSource>()
   for (const pkg of ctx.plugins.packageList()) {
     // An update of a builtin's package goes by the builtin's entry; its code declares them (below)
     const entry = (pkg.manifest as { builtin?: { entry?: unknown } }).builtin?.entry
     if (typeof entry === 'string' && entry.startsWith('builtin:')) continue
-    add(pkg.name, pkg.manifest)
+    if (pkg.manifest.launch !== undefined) sources.set(pkg.name, { target: pkg.name, launch: pkg.manifest.launch })
   }
   for (const status of ctx.plugins.list()) {
-    if (status.builtin) add(status.name, status.manifest)
+    if (status.builtin && status.manifest.launch !== undefined) sources.set(status.name, { target: status.name, launch: status.manifest.launch })
   }
   return [...sources.values()]
 }
