@@ -89,7 +89,6 @@ export default defineConfig({
             { src: './output/builtin-packages/@luckylillia-dev/plugin-webui/lib/webui', dest: 'dist/webui', flatten: false },
             { src: './src/main/config/default_config.json', dest: 'dist/' },
             { src: './package-dist.json', dest: 'dist/', rename: 'package.json' },
-            { src: './doc/使用说明.txt', dest: 'dist/' },
             { src: './doc/更新日志.txt', dest: 'dist/' },
           ],
         }),
