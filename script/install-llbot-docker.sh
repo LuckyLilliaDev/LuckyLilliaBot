@@ -352,9 +352,6 @@ LLBOT_HEALTHCHECK="    healthcheck:
 if [ "$PROTOCOL_MODE" == "nativeqq" ]; then
     read -p "NativeQQ 镜像（按 docker/Dockerfile.nativeqq 构建，需包含 QQ）: " NATIVE_QQ_IMAGE
     [ -n "$NATIVE_QQ_IMAGE" ] || { echo "必须提供包含 QQ 和 LLBot 的镜像"; exit 1; }
-    cat > llbot_config/nativeqq_config.json << EOF
-{"qq_path":"/opt/QQ/qq","quick_login_qq":"${AUTO_LOGIN_QQ}","hook_mode":"inline","qq_args":"--no-sandbox","work_dir":"/app/llbot/data"}
-EOF
     cat << EOF > docker-compose.yml
 services:
   llbot:
@@ -362,9 +359,13 @@ services:
     init: true
     stop_grace_period: 30s
 ${PORTS_CONFIG}
+    # Installs the NTQQ protocol plugin on the first start; NTQQ_* below are its settings
+    command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]
     environment:
       - WEBUI_PORT=${WEBUI_PORT}
-      - PROTOCOL_MODE=nativeqq
+      - NTQQ_MODE=nativeqq
+      # NTQQ_ACCOUNT 留空=WebUI 里点「启动 QQ」后登录; 填 QQ 号=启动时自动快速登录该号
+      - NTQQ_ACCOUNT=${AUTO_LOGIN_QQ}
     volumes:
       - ./llbot_config:/app/llbot/data:rw
       - qq_volume:/root/.config/QQ
@@ -375,14 +376,17 @@ volumes:
 EOF
 else
     LLBOT_ENV="      - WEBUI_PORT=${WEBUI_PORT}
-      # AUTO_LOGIN_QQ 留空=WebUI 登录页点选账号; 填 QQ 号=重启自动恢复该号 (免扫码)
-      - AUTO_LOGIN_QQ=${AUTO_LOGIN_QQ}"
+      - NTQQ_MODE=direct
+      # NTQQ_ACCOUNT 留空=WebUI 登录页点选账号; 填 QQ 号=重启自动恢复该号 (免扫码)
+      - NTQQ_ACCOUNT=${AUTO_LOGIN_QQ}"
 
     cat << EOF > docker-compose.yml
 services:
   llbot:
     image: ${docker_mirror}linyuchen/llbot:${LLBOT_TAG}
 ${PORTS_CONFIG}
+    # Installs the NTQQ protocol plugin on the first start; NTQQ_* below are its settings
+    command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
