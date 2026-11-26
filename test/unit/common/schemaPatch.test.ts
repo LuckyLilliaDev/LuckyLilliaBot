@@ -202,4 +202,44 @@ describe('schema-aware config patching', () => {
       { kind: 'merge', value: { connect: [{ type: 'ws-reverse', urll: 'ws://x' }] } },
     ])).toThrow(/没有配置项「connect\.0\.urll」/)
   })
+
+  describe('list selectors', () => {
+    const ListSchema = Schema.object({
+      connect: Schema.array(Schema.union([
+        Schema.object({
+          type: Schema.const('ws').required(),
+          enable: Schema.boolean().default(false),
+          port: Schema.natural().default(3001),
+        }),
+        Schema.object({
+          type: Schema.const('http').required(),
+          enable: Schema.boolean().default(false),
+          port: Schema.natural().default(3000),
+        }),
+      ])).default([]),
+    })
+    const listNode = schemaOf(ListSchema)
+    const set = (path: string, raw: string) => ({ kind: 'set' as const, path: path.split('.'), raw })
+
+    it('changes the first item of that kind and keeps the others', () => {
+      const next = applyConfigPatches(
+        { connect: [{ type: 'http', port: 3000 }, { type: 'ws', port: 3001 }, { type: 'ws', port: 4001 }] },
+        listNode,
+        [set('connect[type=ws].port', '5001'), set('connect[type=ws].enable', 'true')],
+      )
+      expect(next.connect).toEqual([{ type: 'http', port: 3000 }, { type: 'ws', port: 5001, enable: true }, { type: 'ws', port: 4001 }])
+    })
+
+    it('adds an item of that kind when there is none, typed by the schema', () => {
+      const next = applyConfigPatches({}, listNode, [set('connect[type=http].port', '8080')])
+      expect(next.connect).toEqual([{ type: 'http', port: 8080 }])
+    })
+
+    it('refuses a kind the list cannot hold, a field it has not, and a selector with nothing after it', () => {
+      expect(() => applyConfigPatches({}, listNode, [set('connect[type=wss].port', '1')])).toThrow(/可选值/)
+      expect(() => applyConfigPatches({}, listNode, [set('connect[type=ws].prot', '1')])).toThrow(/没有配置项/)
+      expect(() => applyConfigPatches({}, listNode, [set('connect[type=ws]', '1')])).toThrow(/要再写出它的字段/)
+      expect(() => applyConfigPatches({}, listNode, [set('connect[__proto__=x].port', '1')])).toThrow(/非法段/)
+    })
+  })
 })

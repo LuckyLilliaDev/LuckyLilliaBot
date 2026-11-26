@@ -88,7 +88,7 @@ export function migrateToInstances(log: MigrationLog) {
   for (const { name, from } of instances) {
     const what = from ? `QQ ${from} 的配置` : '没有登录过的旧配置'
     log.info(`已把${what}迁到实例 ${name}（data/instances/${name}/）`)
-    if (name !== DEFAULT_INSTANCE) log.info(`QQ ${name} 的配置和 ${DEFAULT_INSTANCE} 不同，单独放在实例 ${name}：用 -q ${name} 或 --instance ${name} 启动就会用它`)
+    if (name !== DEFAULT_INSTANCE) log.info(`QQ ${name} 的配置和 ${DEFAULT_INSTANCE} 不同，单独放在实例 ${name}：用 --instance ${name} 启动就会用它`)
   }
   log.info('登录方式沿用旧版的纯协议 · Linux，可以在 WebUI 的「NTQQ 协议」页更改')
   if (sources.size) log.info(`旧配置文件已改名为 *.bak：${[...sources].map(source => path.relative(DATA_DIR, source)).join('、')}`)

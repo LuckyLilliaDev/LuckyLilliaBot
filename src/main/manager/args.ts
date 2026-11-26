@@ -16,7 +16,7 @@ const SHARED_FLAG = new Set(['--plugin-hmr', '--dev', '--debug'])
 export interface SplitArgs {
   /** `--webui-port`, if given and a valid port */
   webuiPort?: number
-  /** For the target instance only (`--instance`, else the one `-q` picks, else default) */
+  /** For the target instance only (`--instance`, else default) */
   target: string[]
   /** For every instance */
   shared: string[]
@@ -51,7 +51,7 @@ export function splitArgs(argv: readonly string[]): SplitArgs {
       if (!inline && takesNext(argv, i)) result.shared.push(argv[++i])
       continue
     }
-    // Not the bot's: the target's, with the value that follows it (`-q 123`, `--plugin <name>`)
+    // Not the bot's: the target's, with the value that follows it (`--ntqq-account 123`, `--plugin <name>`)
     result.target.push(arg)
     if (!inline && takesNext(argv, i)) result.target.push(argv[++i])
   }

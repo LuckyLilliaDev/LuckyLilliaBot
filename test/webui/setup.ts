@@ -31,6 +31,5 @@ vi.mock('@/main/log', () => ({
 vi.mock('@/common/utils/environment', () => ({
   isDockerEnvironment: vi.fn(() => false),
   isDevMode: vi.fn(() => false),
-  getSpecifiedUin: vi.fn(() => undefined),
   getInstanceArg: vi.fn(() => undefined),
 }))

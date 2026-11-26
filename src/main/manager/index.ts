@@ -70,7 +70,7 @@ async function main() {
   registry.load()
   let explicitTarget: string | undefined
   try {
-    const choice = resolveInstance(argv, process.env, registry.instancesDir)
+    const choice = resolveInstance(argv, process.env)
     if (choice.reason !== '默认实例') explicitTarget = choice.name
   } catch (error) {
     log.error((error as Error).message)
@@ -94,7 +94,7 @@ async function main() {
     if (existing) return existing
     existing = new InstanceProcess(name, {
       core,
-      // What only names one account (-q, --protocol, ...) is for the instance the launch named
+      // What only one account's launch means (--ntqq-account, --plugin, ...) is for the instance the launch named
       args: () => (name === target ? [...args.shared, ...args.target] : args.shared),
       secret,
       output: (from, line, stream) => {

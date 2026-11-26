@@ -120,7 +120,7 @@ export function apply(ctx: Context) {
 | Bot 实例（`data/instances/<实例名>/`） | `settings.json`、`plugins.json`、`database.db`、`plugin-data/<包键>/`（`global` / `bot`），每个实例由独立子进程运行 |
 | 同一 Bot 实例内的插件条目 | 启停、配置、生效范围、排序和运行状态 |
 
-默认通过管理器（`llbot-manager.js`）在同一进程树内统一拉起和管理所有实例：所有实例共用同一个 WebUI 网关端口（配置存于 `data/manager.json`，可用 `--webui-port` 或 `LLBOT_WEBUI_PORT` 覆盖）和同一套登录密码（`data/webui_token.txt`）。访问根路径 `/` 会自动进入当前实例（挂载在 `/i/<实例名>/`），通过侧边栏内置的「实例管理」页统一切换、新建、启停、查看终端日志和配置自启。启动参数 `--instance <名字>` 指定本次启动时附带拉起并接收单实例参数（如 `-q`、`--protocol`）的目标实例；使用 `--no-manager` 或 `--no-supervisor` 时退回单进程单实例模式。
+默认通过管理器（`llbot-manager.js`）在同一进程树内统一拉起和管理所有实例：所有实例共用同一个 WebUI 网关端口（配置存于 `data/manager.json`，可用 `--webui-port` 或 `LLBOT_WEBUI_PORT` 覆盖）和同一套登录密码（`data/webui_token.txt`）。访问根路径 `/` 会自动进入当前实例（挂载在 `/i/<实例名>/`），通过侧边栏内置的「实例管理」页统一切换、新建、启停、查看终端日志和配置自启。启动参数 `--instance <名字>` 指定本次启动时附带拉起并接收单实例参数（如 `--ntqq-account`、`--plugin`）的目标实例；使用 `--no-manager` 或 `--no-supervisor` 时退回单进程单实例模式。
 
 第三方插件包可添加多个条目，分别处理不同 Bot 或群。条目不等于独立代码副本，也不自动获得单独文件目录；同名服务、同端口、同文件仍可能冲突。
 

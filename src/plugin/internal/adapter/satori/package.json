@@ -40,6 +40,16 @@
       "entry": "builtin:satori",
       "abi": 1
     },
-    "webui": "./lib/client/index.js"
+    "webui": "./lib/client/index.js",
+    "args": {
+      "--satori-host": "host",
+      "--satori-port": "port",
+      "--satori-token": "token"
+    },
+    "env": {
+      "SATORI_HOST": "host",
+      "SATORI_PORT": "port",
+      "SATORI_TOKEN": "token"
+    }
   }
 }

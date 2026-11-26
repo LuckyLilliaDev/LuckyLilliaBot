@@ -25,12 +25,9 @@ describe('resolveInstance', () => {
     expect(resolveInstance(argv(), { LLBOT_INSTANCE: 'env' })).toEqual({ name: 'env', reason: 'LLBOT_INSTANCE' })
   })
 
-  it('falls back to the instance named after -q only when there is one', () => {
-    expect(resolveInstance(argv('-q', '10001'), {}).name).toBe('default')
+  it('does not pick an instance after a QQ number: that is the NTQQ protocol plugin\'s', () => {
     mkdirSync(path.join(DATA_DIR, 'instances', '10001'), { recursive: true })
-    expect(resolveInstance(argv('-q', '10001'), {}).name).toBe('10001')
-    // an explicit choice still wins
-    expect(resolveInstance(argv('-q', '10001', '--instance', 'work'), {}).name).toBe('work')
+    expect(resolveInstance(argv('-q', '10001'), {}).name).toBe('default')
   })
 
   it('refuses a name that cannot be a directory', () => {

@@ -56,6 +56,7 @@ my-plugin/
 - `main` 或 `exports["."]` 指向后端入口。ESM 的 `.js` 文件需要 `"type": "module"`。
 - SDK 的 `peerDependencies` 用于兼容性检查。插件包依赖和服务依赖的声明见[依赖与提供的服务](basics.md#依赖与提供的服务)。
 - `llbot.hidden` 从 WebUI 列表隐藏条目，`llbot.preview` 显示开发中标记，两者都不是权限设置。
+- `llbot.args` 和 `llbot.env` 声明写入配置的启动参数和环境变量，见[声明启动参数和环境变量](#声明启动参数和环境变量)。
 
 ### 分类
 
@@ -277,12 +278,14 @@ node llbot.js \
   --plugin-config qq-official:sandbox=true
 
 # 多层嵌套对象与数组下标（支持任意层级，也可在子路径直接传局部 JSON/JSON5 对象合并）
+# connect[type=ws] 选中列表里第一个 type 为 ws 的项，没有就新增一项
 node llbot.js \
   --plugin-config ntqq-offline-email:smtp.host=smtp.gmail.com \
   --plugin-config ntqq-offline-email:smtp.port=465 \
   --plugin-config ntqq-offline-email:smtp.auth.user=bot@example.com \
   --plugin-config "milky:http={port:3020}" \
-  --plugin-config onebot11:connect.0.url=ws://127.0.0.1:8080/onebot
+  --plugin-config onebot11:connect.0.url=ws://127.0.0.1:8080/onebot \
+  --plugin-config onebot11:connect[type=ws].port=3001
 
 # JSON / JSON5 对象局部合并（未提及的字段保持原值）
 node llbot.js --plugin-config 'satori={"port":5500,"token":"abc"}'
@@ -296,3 +299,43 @@ node llbot.js \
 - 插件名支持**短名**（如 `qq-official`、`proxy`、`satori`、`onebot11`、`milky`、`telegram-protocol`）、`builtin:<名称>` 及完整 npm 包名（如 `@luckylillia-dev/plugin-onebot11`）。
 - 同一插件可重复传多个 `--plugin-config`，按命令行顺序依次应用；配置会局部合并并持久化到实例的 `plugins.json`（保留未提及字段与已有密钥），并按插件 Schema 校验，字段名写错时会提示可用字段列表。
 - 启动日志会自动脱敏 `--plugin-config` 的值，避免泄露密钥或 Token。
+
+### 声明启动参数和环境变量
+
+`--plugin-config` 要写出插件名和字段路径。插件可以在 `llbot.args` 和 `llbot.env` 里声明更短的启动参数和环境变量，宿主启动时把它们的值写进配置，效果和对应的 `--plugin-config` 一样：
+
+```json
+"llbot": {
+  "args": {
+    "--satori-port": "port",
+    "--ntqq-mode": { "path": "mode", "values": { "native": "nativeqq" } },
+    "--onebot-ws-port": { "path": "connect[type=ws].port", "set": { "connect[type=ws].enable": true } }
+  },
+  "env": {
+    "SATORI_PORT": "port",
+    "NTQQ_MODE": { "path": "mode", "values": { "native": "nativeqq" } }
+  }
+}
+```
+
+这样 `--satori-port=5500`、`--satori-port 5500` 和环境变量 `SATORI_PORT=5500` 都会把 5500 写进 Satori 的 `port`。
+
+- 值是字段路径，写法和 `--plugin-config` 相同，`name[key=value]` 选中列表里第一个 `key` 为 `value` 的项，没有就新增一项。
+- 写成对象时，`values` 把给出的值换成配置里的值，没列出的原样写入；`set` 同时写入其他字段，例如顺带启用这条连接。
+- 和 `--plugin-config` 一样，写入的配置会保存，插件会被信任并启用。
+- 先应用环境变量，再按命令行顺序应用参数，最后应用 `--plugin-config`，同一字段以后写的为准。值为空的环境变量当作没设置，方便 Compose 里留空。
+- 只认已安装插件的声明：插件还没装时，这些参数和变量没有效果，要另外加 `--plugin <包名>` 安装。
+- 参数名只能是 `--` 加小写字母、数字和 `-`，不能和 `--plugin*`、`--instance`、`--webui-port` 等宿主参数重名；变量名只能是大写字母、数字和 `_`，不能用 `LLBOT_`、`NODE_`、`NPM_` 开头，也不能是 `PATH`、`HOME` 等系统变量。不符合的声明会被忽略并在日志里警告。
+- 两个插件声明了同一个名字时只警告；真正用到这个名字时，启动会报错退出。
+- 名字以 `-token`、`-secret`、`-password`、`-key` 结尾的参数，启动日志里的值显示为 `***`。
+
+内置和官方插件声明的名字：
+
+| 插件 | 启动参数 | 环境变量 |
+|---|---|---|
+| NTQQ 协议 | `--ntqq-mode`（`native` / `direct`）、`--ntqq-protocol`、`--ntqq-sign-cdn`（`cf` / `china`）、`--ntqq-account`、`--ntqq-qq-path` | `NTQQ_MODE`、`NTQQ_PROTOCOL`、`NTQQ_SIGN_CDN`、`NTQQ_ACCOUNT`、`NTQQ_QQ_PATH` |
+| OneBot 11 | `--onebot-ws-host` / `-port` / `-token`、`--onebot-http-host` / `-port` / `-token`、`--onebot-ws-reverse-url` / `-token`、`--onebot-http-post-url` / `-token` | 对应的 `ONEBOT_WS_PORT` 等 |
+| Milky | `--milky-host`、`--milky-port`、`--milky-token`、`--milky-webhook-url`（逗号分隔）、`--milky-webhook-token` | `MILKY_HOST` 等 |
+| Satori | `--satori-host`、`--satori-port`、`--satori-token` | `SATORI_HOST`、`SATORI_PORT`、`SATORI_TOKEN` |
+
+OneBot 11 的参数改的是该类型的第一条连接，没有就新建一条，并启用它。

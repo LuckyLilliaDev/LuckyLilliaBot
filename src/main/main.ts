@@ -2,6 +2,8 @@ import path from 'node:path'
 import { installHostLifecycle } from './hostLifecycle'
 import {
   redactStartupArgv,
+  pluginArgSources,
+  startupPluginArgs,
   startupPluginConfigs,
   startupPluginError,
   startupPluginNames,
@@ -86,7 +88,7 @@ async function onLoad() {
   } catch (error) {
     return startupFailed(error)
   }
-  // Before the instance is picked: it may create the one `-q` points to (config-storage §9)
+  // Before the instance is picked: it may create instances (config-storage §9)
   migrateToInstances(ctx.logger('config'))
   let instance: InstanceChoice
   try {
@@ -139,13 +141,15 @@ async function onLoad() {
     ctx.parallel('llob/config-updated', config)
   })
 
-  if (requestedPlugins.length || requestedConfigs.length) {
-    try {
-      await plugins
-      await startRequestedPlugins(ctx, requestedPlugins, undefined, requestedConfigs)
-    } catch (error) {
-      return startupFailed(error)
-    }
+  // The launch flags and variables installed plugins declare (llbot.args, llbot.env) are only known once the plugin
+  // service has scanned them
+  try {
+    await plugins
+    // What --plugin-config says goes last, so it wins over a plugin's own flag or variable for the same field
+    const declared = startupPluginArgs(pluginArgSources(ctx), process.argv, message => ctx.logger('startup-plugins').warn(message))
+    await startRequestedPlugins(ctx, requestedPlugins, undefined, [...declared, ...requestedConfigs])
+  } catch (error) {
+    return startupFailed(error)
   }
 
   // 只 log 不退出: 一个 orphaned rejection (如 sendMsg 提前 throw 后 echoP 的 timer) 不该拖垮整个进程

@@ -7,6 +7,8 @@ export type ConfigPatch =
   | { kind: 'merge'; value: Record<string, unknown> }
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+/** `name[key=value]`: the first item of the list `name` whose `key` is `value` (added when there is none) */
+const SELECTOR = /^([^[\]=]+)\[([^[\]=]+)=([^[\]]*)\]$/
 
 export class ConfigPatchError extends Error {}
 
@@ -285,7 +287,9 @@ function setAtPath(
 ): void {
   if (!path.length) throw new ConfigPatchError('配置项路径不能为空')
   for (const segment of path) {
-    if (!segment || FORBIDDEN_KEYS.has(segment)) {
+    const selector = SELECTOR.exec(segment)
+    const keys = selector ? [selector[1], selector[2]] : [segment]
+    if (!segment || keys.some(key => FORBIDDEN_KEYS.has(key))) {
       throw new ConfigPatchError(`配置项路径「${path.join('.')}」包含非法段「${segment}」`)
     }
   }
@@ -330,6 +334,28 @@ function setAtPath(
 
     if (!isPlainObject(container)) {
       throw new ConfigPatchError(`配置项「${prefix}」的父级「${path.slice(0, i).join('.')}」不是对象`)
+    }
+    const selector = SELECTOR.exec(segment)
+    if (selector) {
+      if (isLast) throw new ConfigPatchError(`配置项「${prefix}」选中的是列表中的一项，要再写出它的字段`)
+      const [, key, field, wanted] = selector
+      const dict = objectDictOf(schema, container)
+      if (dict && !Object.hasOwn(dict, key)) throw unknownFieldError(label, path.slice(0, i).concat(key).join('.'), dict)
+      const listNode = unwrap(dict ? dict[key] : null)
+      if (listNode && listNode.type !== 'array') throw new ConfigPatchError(`配置项「${prefix}」：「${key}」不是列表`)
+      if (container[key] === undefined) container[key] = []
+      const list = container[key]
+      if (!Array.isArray(list)) throw new ConfigPatchError(`配置项「${prefix}」：「${key}」不是列表`)
+      const itemNode = listNode?.inner ?? null
+      let item = list.find(candidate => isPlainObject(candidate) && String(candidate[field]) === wanted)
+      if (!item) {
+        const fieldNode = objectDictOf(itemNode, { [field]: wanted })?.[field] ?? null
+        item = { [field]: coerceValue(wanted, fieldNode, `${prefix}.${field}`) }
+        list.push(item)
+      }
+      container = item
+      schema = itemNode
+      continue
     }
     const dict = objectDictOf(schema, container)
     if (dict && !Object.hasOwn(dict, segment)) {

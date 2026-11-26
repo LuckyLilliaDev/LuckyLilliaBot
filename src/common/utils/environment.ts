@@ -47,13 +47,3 @@ export function isPluginHmr(argv: string[] = process.argv): boolean {
     return argv.includes('--plugin-hmr')
 }
 
-/** `-q <uin>` / `--qq <uin>`: without --instance, the instance named after that QQ number is used if there is one. */
-export function getSpecifiedUin(argv: string[] = process.argv): string | undefined {
-    for (let i = 0; i < argv.length; i++) {
-        const a = argv[i]
-        if ((a === '-q' || a === '--qq') && i + 1 < argv.length) return argv[i + 1]
-        if (a.startsWith('-q=')) return a.slice('-q='.length)
-        if (a.startsWith('--qq=')) return a.slice('--qq='.length)
-    }
-    return undefined
-}
