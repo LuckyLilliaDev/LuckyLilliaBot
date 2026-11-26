@@ -7,7 +7,7 @@ const DATA_DIR = mkdtempSync(path.join(tmpdir(), 'llbot-migrate-'))
 
 vi.mock('@/common/globalVars', () => ({ DATA_DIR }))
 
-const { liftBuiltinSettings, migrateToInstances, renameNativeQQSettings, migrateExtractedPlugins, migrateNTQQMessaging, migrateRenamedPackages } = await import('@/main/config/migrate')
+const { liftBuiltinSettings, migrateToInstances, renameNativeQQSettings, migrateExtractedPlugins, migrateNTQQMessaging, migrateRenamedPackages, migrateWebuiToken } = await import('@/main/config/migrate')
 
 const log = { info: vi.fn(), warn: vi.fn() }
 const at = (...parts: string[]) => path.join(DATA_DIR, ...parts)
@@ -430,5 +430,40 @@ describe('migrateRenamedPackages', () => {
     migrateRenamedPackages(log)
     expect(read('instances', 'default', 'plugins.json')).toEqual(plugins)
     expect(log.info).not.toHaveBeenCalled()
+  })
+})
+
+describe('migrateWebuiToken', () => {
+  const token = () => readFileSync(at('webui_token.txt'), 'utf8')
+
+  it("takes the password of the instance starting now first, so its WebUI keeps the password it had", () => {
+    put('instances/default/webui_token.txt', 'default-secret')
+    put('instances/work/webui_token.txt', 'work-secret')
+    migrateWebuiToken(log, 'work')
+    expect(token()).toBe('work-secret')
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('沿用实例 work 的密码'))
+    // The old files stay
+    expect(existsSync(at('instances/work/webui_token.txt'))).toBe(true)
+  })
+
+  it('falls back to the default instance, then any other, skipping empty files', () => {
+    put('instances/default/webui_token.txt', '  ')
+    put('instances/other/webui_token.txt', 'other-secret')
+    migrateWebuiToken(log, 'fresh')
+    expect(token()).toBe('other-secret')
+  })
+
+  it('never replaces the shared password once there is one', () => {
+    put('webui_token.txt', 'shared')
+    put('instances/default/webui_token.txt', 'default-secret')
+    migrateWebuiToken(log, 'default')
+    expect(token()).toBe('shared')
+    expect(log.info).not.toHaveBeenCalled()
+  })
+
+  it('leaves the WebUI to ask for a password when no instance had one', () => {
+    mkdirSync(at('instances/default'), { recursive: true })
+    migrateWebuiToken(log, 'default')
+    expect(existsSync(at('webui_token.txt'))).toBe(false)
   })
 })

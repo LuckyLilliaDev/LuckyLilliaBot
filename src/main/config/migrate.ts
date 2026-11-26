@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 import JSON5 from 'json5'
 import { deepEqual, Dict } from 'cosmokit'
@@ -273,6 +273,30 @@ export function migrateExtractedPlugins(log: MigrationLog) {
  * every start, before the migrations that look for the plugins by their new names; a directory both names have is
  * left for the user to merge.
  */
+/**
+ * The WebUI password used to be each instance's (data/instances/<name>/webui_token.txt) and is now
+ * data/webui_token.txt for all of them. Without that file, the first password found becomes it: the instance
+ * starting now, then default, then the others. Otherwise an upgrade would leave the WebUI without a password,
+ * for anyone who reaches it to set. The old files stay, unused.
+ */
+export function migrateWebuiToken(log: MigrationLog, first?: string) {
+  const target = configPaths.webuiToken()
+  if (existsSync(target)) return
+  const names = [...new Set([first, DEFAULT_INSTANCE, ...list(instancesDir())].filter((name): name is string => !!name))]
+  for (const name of names) {
+    const source = path.join(instancesDir(), name, 'webui_token.txt')
+    try {
+      if (!readFileSync(source, 'utf8').trim()) continue
+      mkdirSync(path.dirname(target), { recursive: true })
+      copyFileSync(source, target)
+      log.info(`WebUI 改为所有实例共用一个密码：沿用实例 ${name} 的密码，现在保存在 ${path.relative(DATA_DIR, target)}`)
+      return
+    } catch {
+      // Missing or unreadable: the next one
+    }
+  }
+}
+
 export function migrateRenamedPackages(log: MigrationLog) {
   const renamed = (name: unknown) => typeof name === 'string' && Object.hasOwn(RENAMED_PACKAGES, name) ? RENAMED_PACKAGES[name] : undefined
   const file = configPaths.plugins()

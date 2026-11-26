@@ -9,7 +9,7 @@ import path from 'node:path'
 import { configPaths } from '@/common/configPaths'
 import { DATA_DIR, LOG_DIR, STATE_DIR } from '@/common/globalVars'
 import { resolveInstance } from '@/common/instance'
-import { migrateToInstances } from '../config/migrate'
+import { migrateToInstances, migrateWebuiToken } from '../config/migrate'
 import { CoreUpdater, installDirOf, scheduleAutoCheck, updateBlocker } from '../coreUpdate'
 import { lockManager, runningInstances } from '../instanceLock'
 import { isSupervised, parentPidOf, RESTART_EXIT_CODE } from '../restart'
@@ -114,6 +114,7 @@ async function main() {
     return existing
   }
 
+  migrateWebuiToken({ info: (...parts) => log.info(parts.join(' ')), warn: (...parts) => log.warn(parts.join(' ')) }, target)
   const auth = new GatewayAuth({
     file: configPaths.webuiToken(),
     accessLog: path.join(LOG_DIR, 'webui_access.log'),
