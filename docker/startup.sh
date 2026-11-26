@@ -12,8 +12,12 @@ mkdir -p /app/llbot/data
 # installed. The variables the image had before are passed on as those.
 lower() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
 if [ -z "$NTQQ_MODE" ]; then
-  # The standard image has no QQ to bridge
-  export NTQQ_MODE="${PROTOCOL_MODE:-direct}"
+  # The standard image has no QQ to bridge; PROTOCOL_MODE called the bridge nativeqq
+  case "$PROTOCOL_MODE" in
+    nativeqq) export NTQQ_MODE=native ;;
+    "") export NTQQ_MODE=direct ;;
+    *) export NTQQ_MODE="$PROTOCOL_MODE" ;;
+  esac
 fi
 if [ -z "$NTQQ_ACCOUNT" ] && [ -n "$AUTO_LOGIN_QQ" ]; then export NTQQ_ACCOUNT="$AUTO_LOGIN_QQ"; fi
 if [ -z "$NTQQ_PROTOCOL" ] && [ -n "$PROTOCOL" ]; then export NTQQ_PROTOCOL="$(lower "$PROTOCOL")"; fi

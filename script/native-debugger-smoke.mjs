@@ -87,13 +87,7 @@ function prepareWorkspace(config) {
   const instance = 'native-smoke'
   const instanceDir = path.join(directory, 'data/instances', instance)
   mkdirSync(instanceDir, { recursive: true })
-  const nativeDir = path.join(directory, 'native-work')
-  mkdirSync(nativeDir)
-  const nativeConfig = path.join(directory, 'nativeqq_config.json')
   const json = (file, value) => writeFileSync(file, JSON.stringify(value, null, 2) + '\n', 'utf8')
-  // -q must cross the actual Bot argument parsing bridge. Do not duplicate the UIN here.
-  json(nativeConfig, { hook_mode: 'debugger', work_dir: nativeDir, debug: false, debug_pb: false,
-    ...(config.qqPath ? { qq_path: config.qqPath } : {}) })
   // The runner reads the bridge from /api/login-info: loopback only, behind a password only it knows
   const webuiPassword = randomBytes(32).toString('hex')
   writeFileSync(path.join(instanceDir, 'webui_token.txt'), webuiPassword, 'utf8')
@@ -101,13 +95,15 @@ function prepareWorkspace(config) {
     webui: { enable: true, host: '127.0.0.1', port: 0 }, msgCacheExpire: 120 })
   const optional = ['dashboard', 'logs', 'satori', 'qq-official', 'webqq', 'email-notification']
   json(path.join(instanceDir, 'plugins.json'), { version: 1, hmr: false, trusted: [ntqqPackage], entries: [
-    { id: 'smoke-nt', name: ntqqPackage, config: { mode: 'nativeqq', protocol: 'linux', nativeQQ: { qqPath: config.qqPath } } },
+    // The login method, the account and the hook mode come from the launch flags (llbot.launch): they must cross LLBot's
+    // own reading of them, so they are not written here
+    { id: 'smoke-nt', name: ntqqPackage, config: { mode: 'direct', protocol: 'linux' } },
     ...optional.map(name => ({ id: `smoke-${name}`, name: `builtin:${name}`, disabled: true })),
     // The host requires these core services.
     { id: 'smoke-webui', name: 'builtin:webui' },
     { id: 'smoke-universal', name: 'builtin:ntqq-universal' },
   ] })
-  return { directory, pluginRoot: exposeNTQQPlugin(directory, config.pluginDir), nativeConfig, instance, webuiHash: createHash('sha256').update(webuiPassword).digest('hex'),
+  return { directory, pluginRoot: exposeNTQQPlugin(directory, config.pluginDir), instance, webuiHash: createHash('sha256').update(webuiPassword).digest('hex'),
     metadataLog: path.join(directory, 'smoke-metadata.jsonl') }
 }
 
@@ -197,7 +193,8 @@ async function main() {
     if (/^(NODE_OPTIONS|AUTH_TOKEN|LLBOT_INSTANCE|LLBOT_WEBUI_.*|LLBOT_LOG_LEVEL|PROTOCOL_MODE|PROTOCOL)$/i.test(name)) delete environment[name]
   }
   Object.assign(environment, { AUTH_TOKEN: token, LLBOT_LOG_LEVEL: 'info', NO_COLOR: '1' })
-  const child = spawn(process.execPath, [path.join(config.dist, 'llbot.js'), '--no-supervisor', `--parent-pid=${keeper.pid}`, '--instance', workspace.instance, '--plugin-dir', workspace.pluginRoot, '--nativeqq', '--nativeqq-config', workspace.nativeConfig, '-q', config.uin],
+  const child = spawn(process.execPath, [path.join(config.dist, 'llbot.js'), '--no-supervisor', `--parent-pid=${keeper.pid}`, '--instance', workspace.instance, '--plugin-dir', workspace.pluginRoot, '--ntqq-mode=native', '--ntqq-hook-mode=debugger', '--ntqq-account', config.uin,
+    ...(config.qqPath ? ['--ntqq-qq-path', config.qqPath] : [])],
     { cwd: workspace.directory, env: environment, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   // Retain the token only in the redactor closure and the already-spawned child's environment.
   delete environment.AUTH_TOKEN
@@ -240,7 +237,7 @@ async function main() {
         check(stableSince === undefined, 'IDENTITY_LOST_DURING_STABILITY_WINDOW')
         await delay(500); continue
       }
-      check(info.mode === 'nativeqq', 'PROTOCOL_MODE_MISMATCH')
+      check(info.mode === 'native', 'PROTOCOL_MODE_MISMATCH')
       seenRunning ||= status.session === 'running'
       check(!status.failure && status.session !== 'failed' && !(seenRunning && status.session === 'stopped'), 'NATIVE_SESSION_FAILED')
       check(!info.uin || String(info.uin) === config.uin, 'LOGIN_UIN_MISMATCH')

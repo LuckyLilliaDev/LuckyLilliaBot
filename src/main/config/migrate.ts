@@ -148,22 +148,24 @@ export function liftBuiltinSettings(log: MigrationLog) {
 }
 
 /**
- * The NT protocol plugin's login method by its NativeQQ names (2026-11-02): the official QQ client bridge was mode
- * `pmhq`, its settings the key `pmhq`. Runs at every start, under the instance lock like the rest.
+ * The NT protocol plugin's login method by its current names: the official QQ client bridge was mode `pmhq`, its
+ * settings the key `pmhq` (until 2026-11-02), then mode `nativeqq` (until 2026-11-26); it is `native` now. Runs at
+ * every start, under the instance lock like the rest.
  */
 export function renameNativeQQSettings(log: MigrationLog) {
   const pluginsFile = configPaths.plugins()
   const plugins = readJson(log, pluginsFile)?.value as PluginsFile | undefined
   if (!Array.isArray(plugins?.entries)) return
   const config = plugins.entries.find(item => item?.name === 'builtin:nt-protocol' || item?.name === '@luckylillia-dev/plugin-nt-protocol')?.config as Dict | undefined
-  if (!config || typeof config !== 'object' || (config.mode !== 'pmhq' && !('pmhq' in config))) return
-  if (config.mode === 'pmhq') config.mode = 'nativeqq'
+  const oldMode = config && typeof config === 'object' && (config.mode === 'pmhq' || config.mode === 'nativeqq')
+  if (!config || typeof config !== 'object' || (!oldMode && !('pmhq' in config))) return
+  if (oldMode) config.mode = 'native'
   if ('pmhq' in config) {
     config.nativeQQ ??= config.pmhq
     delete config.pmhq
   }
   writeJson(pluginsFile, plugins as unknown as Dict)
-  log.info('NTQQ 协议的登录方式设置已改用 NativeQQ 的名字')
+  log.info('NTQQ 协议的登录方式设置已改用新的名字')
 }
 
 export const EXTRACTED_PLUGINS: Readonly<Record<string, string>> = {

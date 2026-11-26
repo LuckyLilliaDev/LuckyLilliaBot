@@ -174,9 +174,9 @@ const VARIABLES: Kind = {
 function settingProblem(setting: Record<string, unknown>): string | undefined {
   if (typeof setting.field !== 'string' || !setting.field.trim()) return '要用 field 写出对应的配置字段'
   if (setting.arg === undefined && setting.env === undefined) return '要写出 arg 或 env'
-  const { values, set } = setting
-  if (values !== undefined && (!isPlainObject(values) || Object.values(values).some(v => typeof v !== 'string'))) {
-    return 'values 要是 { 给出的值: 配置里的值 }'
+  const { aliases, set } = setting
+  if (aliases !== undefined && (!isPlainObject(aliases) || Object.values(aliases).some(v => typeof v !== 'string'))) {
+    return 'aliases 要是 { 给出的值: 配置里的值 }'
   }
   if (set !== undefined && (!isPlainObject(set) || Object.values(set).some(v => !['string', 'number', 'boolean'].includes(typeof v)))) {
     return 'set 要是 { 字段: 值 }'
@@ -232,7 +232,7 @@ function pathPatch(target: string, fieldPath: string, raw: string, name: string)
 /** The settings one given value writes: its field, then what the item sets along with it. */
 function patchesOf({ target, setting }: { target: string; setting: LaunchSetting }, raw: string, name: string): StartupPluginConfig[] {
   return [
-    pathPatch(target, setting.field, setting.values?.[raw] ?? raw, name),
+    pathPatch(target, setting.field, setting.aliases?.[raw] ?? raw, name),
     ...Object.entries(setting.set ?? {}).map(([field, value]) => pathPatch(target, field, String(value), name)),
   ]
 }

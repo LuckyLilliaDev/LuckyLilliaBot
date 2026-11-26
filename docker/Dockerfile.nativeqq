@@ -9,7 +9,7 @@ COPY dist/ .
 COPY docker/startup.sh /startup.sh
 RUN chmod +x /startup.sh
 # Read by the NTQQ protocol plugin (llbot.env); QQ itself it finds at /opt/QQ/qq
-ENV NTQQ_MODE=nativeqq
+ENV NTQQ_MODE=native
 # The bot installs its own updates into the data volume when it knows it runs in a container (src/main/runtime.ts)
 ENV LLBOT_CONTAINER=1
 VOLUME ["/app/llbot/data", "/root/.config/QQ"]

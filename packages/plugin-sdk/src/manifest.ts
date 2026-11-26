@@ -29,8 +29,8 @@ export interface LaunchSetting {
    * An empty one counts as unset; a flag wins over a variable for the same field.
    */
   env?: string
-  /** What given values stand for in the config, e.g. `{ native: 'nativeqq' }`; others go as they are. */
-  values?: Record<string, string>
+  /** Short names for values of the config, e.g. `{ mac: 'macos' }`; values without one go as they are. */
+  aliases?: Record<string, string>
   /** Other fields it sets as well, by path, e.g. `{ 'connect[type=ws].enable': true }`. */
   set?: Record<string, string | number | boolean>
 }

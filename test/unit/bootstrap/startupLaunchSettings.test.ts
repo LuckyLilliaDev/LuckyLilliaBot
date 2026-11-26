@@ -23,7 +23,7 @@ const sources = [
   {
     target: NT,
     launch: [
-      { field: 'mode', arg: '--ntqq-mode', env: 'NTQQ_MODE', values: { native: 'nativeqq' } },
+      { field: 'mode', arg: '--ntqq-mode', env: 'NTQQ_MODE', aliases: { native: 'nativeqq' } },
       { field: 'nativeQQ.qqPath', arg: '--ntqq-qq-path', env: 'NTQQ_QQ_PATH' },
       { field: 'protocol', env: 'NTQQ_PROTOCOL' },
     ],

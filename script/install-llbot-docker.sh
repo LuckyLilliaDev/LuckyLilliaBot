@@ -363,7 +363,7 @@ ${PORTS_CONFIG}
     command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]
     environment:
       - WEBUI_PORT=${WEBUI_PORT}
-      - NTQQ_MODE=nativeqq
+      - NTQQ_MODE=native
       # NTQQ_ACCOUNT 留空=WebUI 里点「启动 QQ」后登录; 填 QQ 号=启动时自动快速登录该号
       - NTQQ_ACCOUNT=${AUTO_LOGIN_QQ}
     volumes:

@@ -308,7 +308,7 @@ node llbot.js \
 "llbot": {
   "launch": [
     { "field": "port", "arg": "--satori-port", "env": "SATORI_PORT" },
-    { "field": "mode", "arg": "--ntqq-mode", "env": "NTQQ_MODE", "values": { "native": "nativeqq" } },
+    { "field": "protocol", "arg": "--ntqq-protocol", "env": "NTQQ_PROTOCOL", "aliases": { "mac": "macos" } },
     { "field": "connect[type=ws].port", "arg": "--onebot-ws-port", "set": { "connect[type=ws].enable": true } }
   ]
 }
@@ -317,7 +317,7 @@ node llbot.js \
 这样 `--satori-port=5500`、`--satori-port 5500` 和环境变量 `SATORI_PORT=5500` 都会把 5500 写进 Satori 的 `port`。每项对应一个配置字段，`arg` 和 `env` 至少写一个。
 
 - `field` 是字段路径，写法和 `--plugin-config` 相同，`name[key=value]` 选中列表里第一个 `key` 为 `value` 的项，没有就新增一项。
-- `values` 把给出的值换成配置里的值，没列出的原样写入；`set` 同时写入其他字段，例如顺带启用这条连接。
+- `aliases` 是值的别名，例如让 `mac` 写成配置里的 `macos`，没列出的值原样写入；`set` 同时写入其他字段，例如顺带启用这条连接。
 - 和 `--plugin-config` 一样，写入的配置会保存，插件会被信任并启用。
 - 先应用环境变量，再按命令行顺序应用参数，最后应用 `--plugin-config`，同一字段以后写的为准。值为空的环境变量当作没设置，方便 Compose 里留空。
 - 只认已安装插件的声明：插件还没装时，这些参数和变量没有效果，要另外加 `--plugin <包名>` 安装。
@@ -329,7 +329,7 @@ node llbot.js \
 
 | 插件 | 启动参数 | 环境变量 |
 |---|---|---|
-| NTQQ 协议 | `--ntqq-mode`（`native` / `direct`）、`--ntqq-protocol`、`--ntqq-sign-cdn`（`cf` / `china`）、`--ntqq-account`、`--ntqq-qq-path` | `NTQQ_MODE`、`NTQQ_PROTOCOL`、`NTQQ_SIGN_CDN`、`NTQQ_ACCOUNT`、`NTQQ_QQ_PATH` |
+| NTQQ 协议 | `--ntqq-mode`（`native` / `direct`）、`--ntqq-protocol`、`--ntqq-sign-cdn`（`cf` / `china`）、`--ntqq-account`、`--ntqq-qq-path`、`--ntqq-hook-mode` | `NTQQ_MODE`、`NTQQ_PROTOCOL`、`NTQQ_SIGN_CDN`、`NTQQ_ACCOUNT`、`NTQQ_QQ_PATH`、`NTQQ_HOOK_MODE` |
 | OneBot 11 | `--onebot-ws-host` / `-port` / `-token`、`--onebot-http-host` / `-port` / `-token`、`--onebot-ws-reverse-url` / `-token`、`--onebot-http-post-url` / `-token` | 对应的 `ONEBOT_WS_PORT` 等 |
 | Milky | `--milky-host`、`--milky-port`、`--milky-token`、`--milky-webhook-url`（逗号分隔）、`--milky-webhook-token` | `MILKY_HOST` 等 |
 | Satori | `--satori-host`、`--satori-port`、`--satori-token` | `SATORI_HOST`、`SATORI_PORT`、`SATORI_TOKEN` |

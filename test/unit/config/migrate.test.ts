@@ -220,7 +220,17 @@ describe('renameNativeQQSettings', () => {
       entries: [{ id: 'n0000001', name: 'builtin:nt-protocol', config: { mode: 'pmhq', pmhq: { configPath: '/qq.json', qqPath: '' } } }],
     })
     renameNativeQQSettings(log)
-    expect(entry()).toEqual({ id: 'n0000001', name: 'builtin:nt-protocol', config: { mode: 'nativeqq', nativeQQ: { configPath: '/qq.json', qqPath: '' } } })
+    expect(entry()).toEqual({ id: 'n0000001', name: 'builtin:nt-protocol', config: { mode: 'native', nativeQQ: { configPath: '/qq.json', qqPath: '' } } })
+    expect(log.info).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the bridge native where it was nativeqq, in the extracted plugin\'s entry as well', () => {
+    put('instances/default/plugins.json', {
+      version: 1,
+      entries: [{ id: 'n0000001', name: '@luckylillia-dev/plugin-nt-protocol', config: { mode: 'nativeqq', nativeQQ: { qqPath: '' } } }],
+    })
+    renameNativeQQSettings(log)
+    expect(entry().config).toEqual({ mode: 'native', nativeQQ: { qqPath: '' } })
     expect(log.info).toHaveBeenCalledTimes(1)
   })
 
