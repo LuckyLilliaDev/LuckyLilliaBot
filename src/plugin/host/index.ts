@@ -311,7 +311,7 @@ class PluginService extends Service {
     super(ctx, 'plugins')
     this.home = ctx
     if (config.dataDir) {
-      this.dataDirs = new PluginDataDirs(config.dataDir)
+      this.dataDirs = new PluginDataDirs(config.dataDir, config.hostDataDir)
     }
     this.store = new PluginStore(config.file)
     this.builtins = new Map((config.builtins ?? []).map(builtin => [builtin.name, builtin]))
@@ -1648,8 +1648,10 @@ namespace PluginService {
   export interface Config {
     /** The instance's plugins.json */
     file: string
-    /** Root of the plugins' data directories (ctx.storage, ctx.baseUrl). Omitted = neither is provided. */
+    /** Root of the instance's plugin data directories (ctx.storage, ctx.baseUrl). Omitted = neither is provided. */
     dataDir?: string
+    /** Root of cross-instance plugin data directories (ctx.storage.dir('host')). Defaults to dataDir when omitted. */
+    hostDataDir?: string
     /** Directories whose child packages are plugins. The market installs into the first. */
     roots: string[]
     /** Watch the roots and reload changed packages. plugins.json `hmr: true` also turns it on. */

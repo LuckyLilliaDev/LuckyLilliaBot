@@ -8,7 +8,6 @@ export const INSTANCE_FILES = {
   settings: 'settings.json',
   plugins: 'plugins.json',
   email: 'email.json',
-  webuiToken: 'webui_token.txt',
   pluginData: 'plugin-data',
   /** The plugins' database (builtin:database); the QQ account's own tables are per account under data/database/ */
   database: 'database.db',
@@ -21,7 +20,10 @@ export const configPaths = {
   settings: (name?: string) => path.join(configPaths.instance(name), INSTANCE_FILES.settings),
   plugins: (name?: string) => path.join(configPaths.instance(name), INSTANCE_FILES.plugins),
   email: (name?: string) => path.join(configPaths.instance(name), INSTANCE_FILES.email),
-  webuiToken: (name?: string) => path.join(configPaths.instance(name), INSTANCE_FILES.webuiToken),
+  /** Shared WebUI login password at data/webui_token.txt (used by both the unified manager and standalone mode). */
+  webuiToken: () => path.join(DATA_DIR, 'webui_token.txt'),
+  /** Cross-instance plugin data root at data/plugin-data/ (ctx.storage.dir('host')). */
+  sharedPluginData: () => path.join(DATA_DIR, 'plugin-data'),
   pluginData: (name?: string) => path.join(configPaths.instance(name), INSTANCE_FILES.pluginData),
   database: (name?: string) => path.join(configPaths.instance(name), INSTANCE_FILES.database),
 }
@@ -30,7 +32,6 @@ export const configPaths = {
 export const legacyPaths = {
   account: (uin: string) => path.join(DATA_DIR, `config_${uin}.json`),
   email: () => path.join(DATA_DIR, 'email_config.json'),
-  webuiToken: () => path.join(DATA_DIR, 'webui_token.txt'),
   /** The unreleased data/config/{global,accounts/<uin>}/ layout. */
   configDir: () => path.join(DATA_DIR, 'config'),
   /** The plugin entries before data/config/, from early in this branch. */

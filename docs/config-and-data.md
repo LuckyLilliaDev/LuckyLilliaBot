@@ -49,16 +49,18 @@ hidden 字段不显示，但已有值仍保存、生效。deprecated、experimen
 ```ts
 const shared = await ctx.storage.dir()
 const sameShared = await ctx.storage.dir('global')
+const crossInstance = await ctx.storage.dir('host')
 const perBot = await ctx.storage.dir('bot', session.bot)
 const explicit = await ctx.storage.dir('bot', 'qq:100001')
 ```
 
-| 调用 | 当前 Bot 实例中的路径 |
+| 调用 | 实际路径 |
 |---|---|
-| `dir()`、`dir('global')` | `plugin-data/<包键>/shared/` |
-| `dir('bot', bot或sid)` | `plugin-data/<包键>/bots/<平台>+<selfId>/` |
+| `dir()`、`dir('global')` | `data/instances/<实例名>/plugin-data/<包键>/shared/`（当前 Bot 实例内独占） |
+| `dir('host')` | `data/plugin-data/<包键>/`（同一 `data/` 下跨实例共享，仍按插件包隔离） |
+| `dir('bot', bot或sid)` | `data/instances/<实例名>/plugin-data/<包键>/bots/<平台>+<selfId>/` |
 
-global 表示当前 Bot 实例内该插件的共享目录，不是整台机器共享。实例根目录是 `data/instances/<实例名>/`，包名中的 `/` 替换成 `+`，例如 `@scope/foo` 对应 `@scope+foo`。
+`global` 表示当前 Bot 实例内该插件的共享目录；`host` 表示同一宿主 `data/` 下所有实例共用的插件目录，适合跨实例凭证、按账号分库的协议数据或大型共享缓存（避免把文件散落到根目录 `data/`）。包名中的 `/` 替换成 `+`，例如 `@scope/foo` 对应 `@scope+foo`。
 
 同包的多个插件条目共用上述目录，不自动按条目 ID 分区。需要隔离时自行设计配置子空间；多个条目写同一文件需处理并发。卸载保留数据，数据目录不应放在代码或前端产物目录内。
 
@@ -114,7 +116,8 @@ export function apply(ctx: Context) {
 
 | 层次 | 隔离内容 |
 |---|---|
-| Bot 实例（`data/instances/<实例名>/`） | `settings.json`、`plugins.json`、`database.db`、`plugin-data/`，每个实例由独立子进程运行 |
+| 宿主全局（`data/`） | `manager.json`、`webui_token.txt`、`plugins/`（共享插件包）、`plugin-data/<包键>/`（`ctx.storage.dir('host')` 跨实例插件数据）、`logs/`、`state/` |
+| Bot 实例（`data/instances/<实例名>/`） | `settings.json`、`plugins.json`、`database.db`、`plugin-data/<包键>/`（`global` / `bot`），每个实例由独立子进程运行 |
 | 同一 Bot 实例内的插件条目 | 启停、配置、生效范围、排序和运行状态 |
 
 默认通过管理器（`llbot-manager.js`）在同一进程树内统一拉起和管理所有实例：所有实例共用同一个 WebUI 网关端口（配置存于 `data/manager.json`，可用 `--webui-port` 或 `LLBOT_WEBUI_PORT` 覆盖）和同一套登录密码（`data/webui_token.txt`）。访问根路径 `/` 会自动进入当前实例（挂载在 `/i/<实例名>/`），通过侧边栏内置的「实例管理」页统一切换、新建、启停、查看终端日志和配置自启。启动参数 `--instance <名字>` 指定本次启动时附带拉起并接收单实例参数（如 `-q`、`--protocol`）的目标实例；使用 `--no-manager` 或 `--no-supervisor` 时退回单进程单实例模式。

@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 export const hashPassword = (password: string): string => createHash('sha256').update(password).digest('hex')
@@ -17,8 +17,6 @@ const LOCK_TIME = 60 * 60 * 1000
 export interface GatewayAuthOptions {
   /** data/webui_token.txt: the one WebUI password of all instances */
   file: string
-  /** Password files to take the first password from: the default instance's first */
-  migrateFrom?: () => string[]
   /** data/logs/webui_access.log */
   accessLog?: string
   log?: { info(message: string): void; warn(message: string): void }
@@ -36,9 +34,7 @@ export class GatewayAuth {
   private failures = 0
   private lockedUntil = 0
 
-  constructor(private readonly options: GatewayAuthOptions) {
-    this.migrate()
-  }
+  constructor(private readonly options: GatewayAuthOptions) {}
 
   /** The password; re-read when the file changed (the desktop app or a hand edit may reset it) */
   getToken(): string {
@@ -117,22 +113,6 @@ export class GatewayAuth {
     }
     this.access(ip, method, url, 200)
     return undefined
-  }
-
-  /** The first start under the manager: the default instance's password becomes everyone's */
-  private migrate() {
-    if (existsSync(this.options.file)) return
-    for (const source of this.options.migrateFrom?.() ?? []) {
-      try {
-        if (!readFileSync(source, 'utf8').trim()) continue
-        mkdirSync(path.dirname(this.options.file), { recursive: true })
-        copyFileSync(source, this.options.file)
-        this.options.log?.info(`WebUI 改为所有实例共用一个密码：沿用 ${source} 的密码，其他实例原来的密码不再使用`)
-        return
-      } catch {
-        // The next one, else the WebUI asks for a new password
-      }
-    }
   }
 
   private access(ip: string, method: string, url: string, status: number, message?: string) {

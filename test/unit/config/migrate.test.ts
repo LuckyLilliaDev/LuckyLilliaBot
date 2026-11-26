@@ -67,7 +67,7 @@ describe('migrateToInstances', () => {
     expect(log.info).toHaveBeenCalledWith(expect.stringContaining('--instance 1'))
   })
 
-  it('gives every instance its own copy of the email settings, the WebUI password and the plugin entries', () => {
+  it('gives every instance its own copy of the email settings and plugin entries while keeping the WebUI password at data root', () => {
     put('config_1.json', { webui: { port: 3001 } }, older)
     put('config_2.json', { webui: { port: 3002 } }, newer)
     put('email_config.json', { enabled: true, from: 'a@b.c' })
@@ -76,11 +76,11 @@ describe('migrateToInstances', () => {
     migrateToInstances(log)
     for (const name of ['default', '1']) {
       expect(read('instances', name, 'email.json')).toEqual({ enabled: true, from: 'a@b.c' })
-      expect(readFileSync(at('instances', name, 'webui_token.txt'), 'utf8')).toBe('secret')
+      expect(existsSync(at('instances', name, 'webui_token.txt'))).toBe(false)
       expect(read('instances', name, 'plugins.json').entries).toEqual([{ id: 'a1', name: 'p' }, loginMethodKept])
     }
     expect(existsSync(at('email_config.json.bak'))).toBe(true)
-    // Kept: the WebUI password of all instances under the manager
+    // Kept at data root: shared WebUI password of all instances
     expect(readFileSync(at('webui_token.txt'), 'utf8')).toBe('secret')
     expect(existsSync(at('webui_token.txt.bak'))).toBe(false)
   })

@@ -114,6 +114,7 @@ async function onLoad() {
   const plugins = ctx.plugin(PluginService, {
     file: configPaths.plugins(),
     dataDir: configPaths.pluginData(),
+    hostDataDir: configPaths.sharedPluginData(),
     roots: [pluginDir, ...getPluginDirs().map(dir => path.resolve(dir))],
     hmr: isPluginHmr(),
     builtins: builtinPlugins,

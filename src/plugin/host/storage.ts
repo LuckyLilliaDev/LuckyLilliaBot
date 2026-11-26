@@ -36,10 +36,14 @@ export class PluginDataDirs {
   private entries = new WeakMap<Fiber, string>()
   private storages = new WeakMap<Fiber, PluginStorage>()
 
-  constructor(readonly root: string) {}
+  constructor(readonly root: string, readonly hostRoot?: string) {}
 
   sharedDir(name: string): string {
     return path.join(this.root, dataKey(name), 'shared')
+  }
+
+  hostDir(name: string): string {
+    return path.join(this.hostRoot ?? this.root, dataKey(name))
   }
 
   /**
@@ -82,6 +86,8 @@ export class PluginDataDirs {
     let dir: string
     if (scope === 'global') {
       dir = this.sharedDir(name)
+    } else if (scope === 'host') {
+      dir = this.hostDir(name)
     } else if (scope === 'bot') {
       const sid = typeof bot === 'string' ? bot : (bot as { sid?: unknown } | undefined)?.sid
       if (typeof sid !== 'string') throw new TypeError(`ctx.storage.dir('bot', bot): expected a bot or its sid`)
@@ -99,7 +105,7 @@ export class PluginDataDirs {
         }
       }
     } else {
-      throw new TypeError(`ctx.storage.dir(): unknown scope ${JSON.stringify(scope)}, expected 'global' or 'bot'`)
+      throw new TypeError(`ctx.storage.dir(): unknown scope ${JSON.stringify(scope)}, expected 'global', 'host' or 'bot'`)
     }
     await mkdir(dir, { recursive: true })
     return dir

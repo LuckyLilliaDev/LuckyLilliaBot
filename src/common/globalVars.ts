@@ -10,12 +10,7 @@ if (!existsSync(DATA_DIR)) {
 export const TEMP_DIR: string = path.join(DATA_DIR, 'temp')
 export const LOG_DIR = path.join(DATA_DIR, 'logs')
 
-export const dbDir = path.join(DATA_DIR, 'database')
-if (!existsSync(dbDir)) {
-  mkdirSync(dbDir)
-}
-
-// Config, plugin data and the WebUI password are per instance, see common/configPaths.ts
+// Config, plugin data and the WebUI password are per instance or under data/, see common/configPaths.ts
 /** The bot's private files: locks. Not for hand edits. */
 export const STATE_DIR = path.join(DATA_DIR, 'state')
 

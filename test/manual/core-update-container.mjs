@@ -58,7 +58,7 @@ await new Promise(resolve => registry.listen(0, '127.0.0.1', resolve))
 
 const instance = path.join(volume, 'instances', 'default')
 mkdirSync(instance, { recursive: true })
-writeFileSync(path.join(instance, 'webui_token.txt'), TOKEN)
+writeFileSync(path.join(volume, 'webui_token.txt'), TOKEN)
 writeFileSync(path.join(instance, 'settings.json'), JSON.stringify({ webui: { enable: true, host: '127.0.0.1', port: PORT } }))
 writeFileSync(path.join(instance, 'plugins.json'), JSON.stringify({ version: 1, entries: [
   { id: 'a0000001', name: 'builtin:market', config: { registry: `http://127.0.0.1:${registry.address().port}`, mirrors: [] } },

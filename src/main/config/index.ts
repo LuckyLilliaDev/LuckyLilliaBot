@@ -268,7 +268,7 @@ export class WebUITokenUtil {
   private token: string = ''
   private mtimeMs = -1
 
-  /** The path is looked up on use: it depends on the instance, which is only fixed after the startup migration. */
+  /** Looked up on use so test suites that redirect DATA_DIR take effect. */
   constructor(private readonly tokenPath: () => string) {}
 
   /**

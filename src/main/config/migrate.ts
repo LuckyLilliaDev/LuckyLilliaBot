@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 import JSON5 from 'json5'
 import { deepEqual, Dict } from 'cosmokit'
@@ -43,9 +43,8 @@ export function migrateToInstances(log: MigrationLog) {
   const instanceWide = readJson(log, path.join(legacyPaths.configDir(), 'global', 'settings.json'))
   const email = newest(readJson(log, legacyPaths.email()), readJson(log, path.join(legacyPaths.configDir(), 'global', 'email.json')))
   const plugins = newest(readJson(log, legacyPaths.pluginsFile()), readJson(log, path.join(legacyPaths.configDir(), 'global', 'plugins.json')))
-  const token = existsSync(legacyPaths.webuiToken()) ? legacyPaths.webuiToken() : undefined
   const pluginData = existsSync(legacyPaths.pluginData()) ? legacyPaths.pluginData() : undefined
-  if (!accounts.length && !instanceWide && !email && !plugins && !token && !pluginData) return
+  if (!accounts.length && !instanceWide && !email && !plugins && !pluginData) return
 
   const baseline = accounts[0] ?? (instanceWide && { ...instanceWide, uin: '' })
   const instances: { name: string; settings?: Dict; from?: string }[] = [
@@ -67,12 +66,11 @@ export function migrateToInstances(log: MigrationLog) {
     if (settings) writeJson(path.join(dir, INSTANCE_FILES.settings), settings)
     if (email) writeJson(path.join(dir, INSTANCE_FILES.email), email.value)
     writeJson(path.join(dir, INSTANCE_FILES.plugins), keepLoginMethod(plugins?.value))
-    if (token) copyFileSync(token, path.join(dir, INSTANCE_FILES.webuiToken))
   }
   if (pluginData) renameSync(pluginData, path.join(staging, DEFAULT_INSTANCE, INSTANCE_FILES.pluginData))
   renameSync(staging, instancesDir())
 
-  // data/webui_token.txt stays: it is the WebUI password of all instances under the manager (manager/auth.ts)
+  // data/webui_token.txt stays at data/ root: it is the single WebUI password shared by all instances
   const sources = new Set([
     ...accounts.flatMap(account => account.sources),
     ...(instanceWide?.sources ?? []),
@@ -325,17 +323,18 @@ export function migrateRenamedPackages(log: MigrationLog) {
       log.info(`插件已改用 @luckylillia-dev 包名，设置随之迁移：${[...moved].join('、') || '信任与界面设置'}。旧包名的已装插件照常使用，在插件市场更新后换成新包`)
     }
   }
-  const root = configPaths.pluginData()
-  for (const [previous, current] of Object.entries(RENAMED_PACKAGES)) {
-    const from = path.join(root, previous.replace('/', '+'))
-    const to = path.join(root, current.replace('/', '+'))
-    if (!existsSync(from)) continue
-    if (existsSync(to)) {
-      log.warn(`插件 ${current} 的数据目录已存在，旧包名 ${previous} 的数据仍在 ${path.relative(DATA_DIR, from)}，需要的话请手动合并`)
-      continue
+  for (const root of [configPaths.pluginData(), configPaths.sharedPluginData()]) {
+    for (const [previous, current] of Object.entries(RENAMED_PACKAGES)) {
+      const from = path.join(root, previous.replace('/', '+'))
+      const to = path.join(root, current.replace('/', '+'))
+      if (!existsSync(from)) continue
+      if (existsSync(to)) {
+        log.warn(`插件 ${current} 的数据目录已存在，旧包名 ${previous} 的数据仍在 ${path.relative(DATA_DIR, from)}，需要的话请手动合并`)
+        continue
+      }
+      renameSync(from, to)
+      log.info(`插件数据已从 ${path.relative(DATA_DIR, from)} 移到 ${path.relative(DATA_DIR, to)}`)
     }
-    renameSync(from, to)
-    log.info(`插件数据已从 ${path.relative(DATA_DIR, from)} 移到 ${path.relative(DATA_DIR, to)}`)
   }
 }
 

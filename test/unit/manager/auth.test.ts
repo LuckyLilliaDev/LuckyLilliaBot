@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { GatewayAuth, hashPassword } from '@/main/manager/auth'
 
 let dir: string
@@ -13,24 +13,6 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 const file = () => path.join(dir, 'webui_token.txt')
 
 describe('the one WebUI login of all instances', () => {
-  it('takes the first instance password there is, the default instance\'s first', () => {
-    for (const [name, password] of [['default', ''], ['bot2', 'two'], ['bot3', 'three']]) {
-      mkdirSync(path.join(dir, name))
-      writeFileSync(path.join(dir, name, 'webui_token.txt'), password)
-    }
-    const log = { info: vi.fn(), warn: vi.fn() }
-    const auth = new GatewayAuth({ file: file(), migrateFrom: () => ['default', 'bot2', 'bot3'].map(n => path.join(dir, n, 'webui_token.txt')), log })
-    expect(auth.getToken()).toBe('two')
-    expect(readFileSync(file(), 'utf8')).toBe('two')
-    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('其他实例原来的密码不再使用'))
-  })
-
-  it('keeps a password it already has', () => {
-    writeFileSync(file(), 'mine\n')
-    writeFileSync(path.join(dir, 'other.txt'), 'other')
-    expect(new GatewayAuth({ file: file(), migrateFrom: () => [path.join(dir, 'other.txt')] }).getToken()).toBe('mine')
-  })
-
   it('asks for a first password, then for the password, then lets the right one through', () => {
     const auth = new GatewayAuth({ file: file() })
     expect(auth.check(undefined, 'ip', 'GET', '/api/x')).toMatchObject({ status: 401, reason: 'unset' })

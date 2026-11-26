@@ -42,7 +42,7 @@ const recordSharedDir = (label: string) => `
   }
 `
 
-async function boot(options: { builtins?: BuiltinPlugin[]; storage?: boolean } = {}) {
+async function boot(options: { builtins?: BuiltinPlugin[]; storage?: boolean; hostDataDir?: string } = {}) {
   ctx = new Context()
   await ctx.plugin(TimerService)
   service = await ctx.plugin(PluginService, {
@@ -50,6 +50,7 @@ async function boot(options: { builtins?: BuiltinPlugin[]; storage?: boolean } =
     roots: [pluginRoot],
     builtins: options.builtins,
     dataDir: options.storage === false ? undefined : dataDir,
+    hostDataDir: options.hostDataDir,
   })
   return ctx.plugins
 }
@@ -267,6 +268,23 @@ describe("ctx.storage.dir('bot', bot)", () => {
     expect(existsSync(path.join(dataDir, 'blocked', 'bots', 'ntqq+10001'))).toBe(false)
   })
 
+  it('gives a cross-instance host directory isolated by package key under hostDataDir', async () => {
+    const hostDataDir = path.join(caseDir, 'shared-plugin-data')
+    writePlugin(path.join('@acme', 'proto'), `
+      export async function apply(ctx) {
+        globalThis.__storage.push(['proto', await ctx.storage.dir('host'), await ctx.storage.dir('global')])
+      }
+    `)
+    const plugins = await boot({ hostDataDir })
+    await plugins.enable(byName('@acme/proto').id)
+
+    const hostDir = path.join(hostDataDir, '@acme+proto')
+    const globalDir = path.join(dataDir, '@acme+proto', 'shared')
+    expect(recorded('proto')).toEqual([['proto', hostDir, globalDir]])
+    expect(existsSync(hostDir)).toBe(true)
+    expect(existsSync(globalDir)).toBe(true)
+  })
+
   it('rejects the removed implicit account scope', async () => {
     writePlugin('eager', `
       export async function apply(ctx) {
@@ -275,6 +293,6 @@ describe("ctx.storage.dir('bot', bot)", () => {
     `)
     const plugins = await boot()
     await plugins.enable(byName('eager').id)
-    expect(recorded('eager')).toEqual([['eager', expect.stringMatching(/expected 'global' or 'bot'/)]])
+    expect(recorded('eager')).toEqual([['eager', expect.stringMatching(/expected 'global', 'host' or 'bot'/)]])
   })
 })

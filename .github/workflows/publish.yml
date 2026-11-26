@@ -71,11 +71,10 @@ jobs:
           mkdir luckylillia-cli-win-x64
           cd luckylillia-cli-win-x64
           mkdir -p bin/llbot
-          cp ../dist/使用说明.txt ./
+          cp ../doc/使用说明-win-cli.txt ./使用说明.txt
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* bin/llbot/
-          wget https://github.com/LLOneBot/exe/releases/latest/download/node.exe -O bin/llbot/node.exe
-          cp ../script/start-native.cmd ./start.cmd
+          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-win-x64.exe -O LuckyLillia.exe
           zip -r ../LuckyLillia-CLI-win-x64.zip ./*
 
       - name: Compress for Windows Desktop
@@ -102,8 +101,10 @@ jobs:
           cp ../doc/使用说明-linux-cli.txt ./使用说明.txt
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/exe/releases/latest/download/node-linux-x64 -O bin/llbot/node
-          cp ../script/start-native.sh ./start.sh
+          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-linux-x64 -O LuckyLillia
+          chmod +x LuckyLillia
+          cp ../script/start-linux.sh ./start.sh
+          chmod +x start.sh
           zip -r ../LuckyLillia-CLI-linux-x64.zip ./*
 
       - name: Compress for Linux CLI arm64
@@ -115,8 +116,10 @@ jobs:
           cp ../doc/使用说明-linux-cli.txt ./使用说明.txt
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/exe/releases/latest/download/node-linux-arm64 -O bin/llbot/node
-          cp ../script/start-native.sh ./start.sh
+          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-linux-arm64 -O LuckyLillia
+          chmod +x LuckyLillia
+          cp ../script/start-linux.sh ./start.sh
+          chmod +x start.sh
           zip -r ../LuckyLillia-CLI-linux-arm64.zip ./*
 
       - name: Compress for macOS CLI arm64
@@ -126,10 +129,12 @@ jobs:
           cd luckylillia-cli-macos-arm64
           mkdir -p bin/llbot
           cp ../doc/使用说明-macos-cli.txt ./使用说明.txt
-          cp ../script/start-native.sh ./start.sh
+          cp ../script/start-mac.sh ./start.sh
+          chmod +x start.sh
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/exe/releases/latest/download/node-darwin-arm64 -O bin/llbot/node
+          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-macos-arm64 -O LuckyLillia
+          chmod +x LuckyLillia
           tar -cJvf ../LuckyLillia-CLI-macos-arm64.tar.xz ./*
 
       - name: Compress for macOS Desktop arm64

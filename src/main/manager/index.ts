@@ -6,6 +6,7 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { configPaths } from '@/common/configPaths'
 import { DATA_DIR, LOG_DIR, STATE_DIR } from '@/common/globalVars'
 import { resolveInstance } from '@/common/instance'
 import { migrateToInstances } from '../config/migrate'
@@ -114,9 +115,7 @@ async function main() {
   }
 
   const auth = new GatewayAuth({
-    file: path.join(DATA_DIR, 'webui_token.txt'),
-    migrateFrom: () => [...new Set([target, registry.defaultInstance(), ...registry.list()].filter((x): x is string => Boolean(x)))]
-      .map(name => path.join(registry.instancesDir, name, 'webui_token.txt')),
+    file: configPaths.webuiToken(),
     accessLog: path.join(LOG_DIR, 'webui_access.log'),
     log,
   })
