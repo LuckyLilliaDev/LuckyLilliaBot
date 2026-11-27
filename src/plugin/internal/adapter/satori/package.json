@@ -35,16 +35,28 @@
       "zh": "支持全部协议端的 Satori 适配器",
       "en": "Supports all protocol backends through Satori"
     },
+    "launch": [
+      {
+        "field": "host",
+        "arg": "--satori-host",
+        "env": "SATORI_HOST"
+      },
+      {
+        "field": "port",
+        "arg": "--satori-port",
+        "env": "SATORI_PORT"
+      },
+      {
+        "field": "token",
+        "arg": "--satori-token",
+        "env": "SATORI_TOKEN"
+      }
+    ],
     "title": "Satori",
     "builtin": {
       "entry": "builtin:satori",
       "abi": 1
     },
-    "webui": "./lib/client/index.js",
-    "launch": [
-      { "field": "host", "arg": "--satori-host", "env": "SATORI_HOST" },
-      { "field": "port", "arg": "--satori-port", "env": "SATORI_PORT" },
-      { "field": "token", "arg": "--satori-token", "env": "SATORI_TOKEN" }
-    ]
+    "webui": "./lib/client/index.js"
   }
 }

@@ -14,7 +14,7 @@ export const builtin: BuiltinPlugin = {
     icon: 'cpu',
     service: { implements: ['satori'] },
     description: { zh: '支持全部协议端的 Satori 适配器', en: 'Supports all protocol backends through Satori' },
-    // Keep in step with llbot.launch in package.json
+    // package.json gets it from here: node scripts/sync-builtin-manifests.mjs
     launch: [
       { field: 'host', arg: '--satori-host', env: 'SATORI_HOST' },
       { field: 'port', arg: '--satori-port', env: 'SATORI_PORT' },
