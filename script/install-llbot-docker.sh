@@ -41,8 +41,6 @@ read -p "请选择 (1/2): " config_mode
 
 declare -A SERVICE_PORTS
 
-ENABLE_WEBUI="true"
-WEBUI_HOST=""
 WEBUI_PORT="3080"
 WEBUI_TOKEN=""
 
@@ -76,180 +74,91 @@ else
     read -p "输入选项（用空格分隔，如: 1 3）: " protocol_choices
 fi
 
-# OneBot 11 配置
-ENABLE_OB11="false"
-declare -a OB11_CONNECTS
+# 选中的协议: 各自的插件包 (compose 的 command 里的 --plugin) 和配置 (插件在 llbot.launch 里声明的环境变量)
+# 容器里要监听全部地址 (0.0.0.0) 才能从宿主机访问, 所以服务端的 Token 必填
+PLUGINS=("@luckylillia-dev/plugin-nt-protocol")
+PLUGIN_ENV=()
+
+# 读一个端口到 REPLY: 第二个参数是默认值; 没有默认值时留空表示不启用
+read_port() {
+    local value
+    while true; do
+        read -p "$1" value
+        value=${value:-$2}
+        if [ -z "$value" ]; then REPLY=""; return; fi
+        if [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -ge 1 ] && [ "$value" -le 65535 ]; then REPLY=$value; return; fi
+        echo "错误：端口必须是 1-65535 的数字！"
+    done
+}
+
+read_required() {
+    local value=""
+    while [ -z "$value" ]; do read -p "$1" value; done
+    REPLY=$value
+}
 
 if [[ "$protocol_choices" =~ 1 ]]; then
-    ENABLE_OB11="true"
-
-    while :; do
-        echo ""
-        echo "OneBot 11 连接配置："
-        echo "1) WebSocket 服务端"
-        echo "2) WebSocket 客户端"
-        echo "3) HTTP 服务端"
-        echo "4) WebHook"
-        echo "0) 完成 OneBot 11 配置"
-        read -p "选择连接类型: " ob11_type
-
-        case $ob11_type in
-            0) break ;;
-            1)
-                read -p "端口: " port
-                token=""
-                while [ -z "$token" ]; do
-                    read -p "Token (必填): " token
-                done
-                SERVICE_PORTS["$port"]=1
-                OB11_CONNECTS+=("{\"type\":\"ws\",\"enable\":true,\"host\":\"\",\"port\":$port,\"token\":\"${token}\",\"reportSelfMessage\":false,\"reportOfflineMessage\":false,\"messageFormat\":\"array\",\"debug\":false,\"heartInterval\":30000}")
-                ;;
-            2)
-                read -p "WebSocket URL: " url
-                read -p "Token (可选): " token
-                OB11_CONNECTS+=("{\"type\":\"ws-reverse\",\"enable\":true,\"url\":\"${url}\",\"token\":\"${token}\",\"reportSelfMessage\":false,\"reportOfflineMessage\":false,\"messageFormat\":\"array\",\"debug\":false,\"heartInterval\":30000}")
-                ;;
-            3)
-                read -p "端口: " port
-                token=""
-                while [ -z "$token" ]; do
-                    read -p "Token (必填): " token
-                done
-                SERVICE_PORTS["$port"]=1
-                OB11_CONNECTS+=("{\"type\":\"http\",\"enable\":true,\"host\":\"\",\"port\":$port,\"token\":\"${token}\",\"reportSelfMessage\":false,\"reportOfflineMessage\":false,\"messageFormat\":\"array\",\"debug\":false}")
-                ;;
-            4)
-                read -p "WebHook URL: " url
-                read -p "Token (可选): " token
-                OB11_CONNECTS+=("{\"type\":\"http-post\",\"enable\":true,\"url\":\"${url}\",\"token\":\"${token}\",\"reportSelfMessage\":false,\"reportOfflineMessage\":false,\"messageFormat\":\"array\",\"debug\":false,\"enableHeart\":false,\"heartInterval\":30000}")
-                ;;
-        esac
-    done
+    PLUGINS+=("@luckylillia-dev/plugin-onebot11")
+    echo ""
+    echo "OneBot 11 连接配置（每种连接一条，留空不启用；更多连接可以在 WebUI 里添加）："
+    read_port "WebSocket 服务端端口: "
+    if [ -n "$REPLY" ]; then
+        port=$REPLY; read_required "WebSocket 服务端 Token (必填): "
+        PLUGIN_ENV+=("ONEBOT_WS_HOST=0.0.0.0" "ONEBOT_WS_PORT=$port" "ONEBOT_WS_TOKEN=$REPLY")
+        SERVICE_PORTS["$port"]=1
+    fi
+    read_port "HTTP 服务端端口: "
+    if [ -n "$REPLY" ]; then
+        port=$REPLY; read_required "HTTP 服务端 Token (必填): "
+        PLUGIN_ENV+=("ONEBOT_HTTP_HOST=0.0.0.0" "ONEBOT_HTTP_PORT=$port" "ONEBOT_HTTP_TOKEN=$REPLY")
+        SERVICE_PORTS["$port"]=1
+    fi
+    read -p "WebSocket 客户端（反向）地址: " url
+    if [ -n "$url" ]; then
+        read -p "WebSocket 客户端 Token (可选): " token
+        PLUGIN_ENV+=("ONEBOT_WS_REVERSE_URL=$url")
+        [ -n "$token" ] && PLUGIN_ENV+=("ONEBOT_WS_REVERSE_TOKEN=$token")
+    fi
+    read -p "HTTP 上报 (WebHook) 地址: " url
+    if [ -n "$url" ]; then
+        read -p "HTTP 上报 Token (可选): " token
+        PLUGIN_ENV+=("ONEBOT_HTTP_POST_URL=$url")
+        [ -n "$token" ] && PLUGIN_ENV+=("ONEBOT_HTTP_POST_TOKEN=$token")
+    fi
 fi
 
-# Milky 配置
-ENABLE_MILKY="false"
-MILKY_HTTP_HOST=""
-MILKY_HTTP_PORT="3000"
-MILKY_HTTP_PREFIX="/milky"
-MILKY_HTTP_TOKEN=""
-MILKY_WEBHOOK_URLS="[]"
-MILKY_WEBHOOK_TOKEN=""
-
 if [[ "$protocol_choices" =~ 2 ]]; then
-    ENABLE_MILKY="true"
-
+    PLUGINS+=("@luckylillia-dev/plugin-milky")
     echo ""
     echo "Milky HTTP 配置："
-    while true; do
-        read -p "HTTP 端口 (默认 3000): " port
-        port=${port:-3000}
-        [[ "$port" =~ ^[0-9]+$ ]] || { echo "错误：端口必须是数字！"; continue; }
-        MILKY_HTTP_PORT=$port
-        SERVICE_PORTS["$MILKY_HTTP_PORT"]=1
-        break
-    done
-
+    read_port "HTTP 端口 (默认 3000): " 3000
+    port=$REPLY
+    SERVICE_PORTS["$port"]=1
     read -p "HTTP 路径前缀 (默认 /milky): " prefix
-    MILKY_HTTP_PREFIX=${prefix:-/milky}
-
-    while [ -z "$MILKY_HTTP_TOKEN" ]; do
-        read -p "Access Token (必填): " MILKY_HTTP_TOKEN
-    done
-
+    read_required "Access Token (必填): "
+    PLUGIN_ENV+=("MILKY_HOST=0.0.0.0" "MILKY_PORT=$port" "MILKY_PREFIX=${prefix:-/milky}" "MILKY_TOKEN=$REPLY")
     echo ""
     read -p "是否配置 WebHook (y/n): " enable_webhook
     if [[ "$enable_webhook" =~ ^[yY]$ ]]; then
         read -p "WebHook URLs (用逗号分隔): " webhook_urls
-        IFS=',' read -ra URLS <<< "$webhook_urls"
-        MILKY_WEBHOOK_URLS="["
-        for i in "${!URLS[@]}"; do
-            [ $i -gt 0 ] && MILKY_WEBHOOK_URLS+=","
-            MILKY_WEBHOOK_URLS+="\"${URLS[$i]}\""
-        done
-        MILKY_WEBHOOK_URLS+="]"
-
-        read -p "WebHook Access Token (可选): " MILKY_WEBHOOK_TOKEN
+        read -p "WebHook Access Token (可选): " token
+        [ -n "$webhook_urls" ] && PLUGIN_ENV+=("MILKY_WEBHOOK_URL=$(printf '%s' "$webhook_urls" | tr -d '[:space:]')")
+        [ -n "$token" ] && PLUGIN_ENV+=("MILKY_WEBHOOK_TOKEN=$token")
     fi
 fi
 
-# Satori 配置
-ENABLE_SATORI="false"
-SATORI_HOST=""
-SATORI_PORT="5500"
-SATORI_TOKEN=""
-
+# Satori 随 Bot 自带, 不用安装
 if [[ "$protocol_choices" =~ 3 ]]; then
-    ENABLE_SATORI="true"
-
     echo ""
     echo "Satori 配置："
-    while true; do
-        read -p "端口 (默认 5500): " port
-        port=${port:-5500}
-        [[ "$port" =~ ^[0-9]+$ ]] || { echo "错误：端口必须是数字！"; continue; }
-        SATORI_PORT=$port
-        SERVICE_PORTS["$SATORI_PORT"]=1
-        break
-    done
-
-    while [ -z "$SATORI_TOKEN" ]; do
-        read -p "Token (必填): " SATORI_TOKEN
-    done
-fi
-
-# 生成 config JSON
-OB11_CONNECT_JSON="[]"
-if [ ${#OB11_CONNECTS[@]} -gt 0 ]; then
-    OB11_CONNECT_JSON="["
-    for i in "${!OB11_CONNECTS[@]}"; do
-        [ $i -gt 0 ] && OB11_CONNECT_JSON+=","
-        OB11_CONNECT_JSON+="${OB11_CONNECTS[$i]}"
-    done
-    OB11_CONNECT_JSON+="]"
+    read_port "端口 (默认 5500): " 5500
+    port=$REPLY
+    SERVICE_PORTS["$port"]=1
+    read_required "Token (必填): "
+    PLUGIN_ENV+=("SATORI_HOST=0.0.0.0" "SATORI_PORT=$port" "SATORI_TOKEN=$REPLY")
 fi
 
 mkdir -p llbot_config
-
-# 仅在完整配置模式下生成配置文件
-if [ "$config_mode" == "1" ]; then
-    # 旧式的 config_<uin>.json, Bot 启动时会迁进 data/instances/ (见 docs/config-storage.md §9), 原文件改名 .bak
-    cat > "llbot_config/config_${AUTO_LOGIN_QQ}.json" << EOF
-{
-  "milky": {
-    "enable": ${ENABLE_MILKY},
-    "reportSelfMessage": false,
-    "http": {
-      "host": "${MILKY_HTTP_HOST}",
-      "port": ${MILKY_HTTP_PORT},
-      "prefix": "${MILKY_HTTP_PREFIX}",
-      "accessToken": "${MILKY_HTTP_TOKEN}"
-    },
-    "webhook": {
-      "urls": ${MILKY_WEBHOOK_URLS},
-      "accessToken": "${MILKY_WEBHOOK_TOKEN}"
-    }
-  },
-  "satori": {
-    "enable": ${ENABLE_SATORI},
-    "host": "${SATORI_HOST}",
-    "port": ${SATORI_PORT},
-    "token": "${SATORI_TOKEN}"
-  },
-  "ob11": {
-    "enable": ${ENABLE_OB11},
-    "connect": ${OB11_CONNECT_JSON}
-  },
-  "webui": {
-    "enable": ${ENABLE_WEBUI},
-    "host": "${WEBUI_HOST}",
-    "port": ${WEBUI_PORT}
-  }
-}
-EOF
-    echo ""
-    echo "配置文件已生成: llbot_config/config_${AUTO_LOGIN_QQ}.json"
-fi
 
 echo "$WEBUI_TOKEN" > "llbot_config/webui_token.txt"
 echo "WebUI 密码文件已生成: llbot_config/webui_token.txt"
@@ -349,6 +258,29 @@ LLBOT_HEALTHCHECK="    healthcheck:
       retries: 3
       start_period: 40s"
 
+# YAML 双引号字符串: 值里的 \ 和 " 要转义
+yaml_quote() { local v=${1//\\/\\\\}; printf '"%s"' "${v//\"/\\\"}"; }
+
+COMMAND_CONFIG="    # 第一次启动时安装这些插件, 下面的 NTQQ_* 等环境变量是它们的配置
+    command: ["
+for i in "${!PLUGINS[@]}"; do
+    [ $i -gt 0 ] && COMMAND_CONFIG+=", "
+    COMMAND_CONFIG+="\"--plugin\", \"${PLUGINS[$i]}\""
+done
+COMMAND_CONFIG+="]"
+
+NTQQ_MODE="direct"
+[ "$PROTOCOL_MODE" == "nativeqq" ] && NTQQ_MODE="native"
+ENV_CONFIG="    environment:
+      - WEBUI_PORT=${WEBUI_PORT}
+      - NTQQ_MODE=${NTQQ_MODE}
+      # NTQQ_ACCOUNT 留空=WebUI 登录页扫码或点选账号; 填 QQ 号=启动时自动快速登录该号
+      - NTQQ_ACCOUNT=${AUTO_LOGIN_QQ}"
+for item in "${PLUGIN_ENV[@]}"; do
+    ENV_CONFIG+="
+      - $(yaml_quote "$item")"
+done
+
 if [ "$PROTOCOL_MODE" == "nativeqq" ]; then
     read -p "NativeQQ 镜像（按 docker/Dockerfile.nativeqq 构建，需包含 QQ）: " NATIVE_QQ_IMAGE
     [ -n "$NATIVE_QQ_IMAGE" ] || { echo "必须提供包含 QQ 和 LLBot 的镜像"; exit 1; }
@@ -359,13 +291,8 @@ services:
     init: true
     stop_grace_period: 30s
 ${PORTS_CONFIG}
-    # Installs the NTQQ protocol plugin on the first start; NTQQ_* below are its settings
-    command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]
-    environment:
-      - WEBUI_PORT=${WEBUI_PORT}
-      - NTQQ_MODE=native
-      # NTQQ_ACCOUNT 留空=WebUI 里点「启动 QQ」后登录; 填 QQ 号=启动时自动快速登录该号
-      - NTQQ_ACCOUNT=${AUTO_LOGIN_QQ}
+${COMMAND_CONFIG}
+${ENV_CONFIG}
     volumes:
       - ./llbot_config:/app/llbot/data:rw
       - qq_volume:/root/.config/QQ
@@ -375,22 +302,15 @@ volumes:
   qq_volume:
 EOF
 else
-    LLBOT_ENV="      - WEBUI_PORT=${WEBUI_PORT}
-      - NTQQ_MODE=direct
-      # NTQQ_ACCOUNT 留空=WebUI 登录页点选账号; 填 QQ 号=重启自动恢复该号 (免扫码)
-      - NTQQ_ACCOUNT=${AUTO_LOGIN_QQ}"
-
     cat << EOF > docker-compose.yml
 services:
   llbot:
     image: ${docker_mirror}linyuchen/llbot:${LLBOT_TAG}
 ${PORTS_CONFIG}
-    # Installs the NTQQ protocol plugin on the first start; NTQQ_* below are its settings
-    command: ["--plugin", "@luckylillia-dev/plugin-nt-protocol"]
+${COMMAND_CONFIG}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-${LLBOT_ENV}
+${ENV_CONFIG}
     volumes:
       - ./llbot_config:/app/llbot/data:rw
     restart: unless-stopped
@@ -408,9 +328,6 @@ printLogin(){
     echo "=========================================="
     echo ""
     echo "生成的文件："
-    if [ "$config_mode" == "1" ]; then
-        echo "  - llbot_config/config_${AUTO_LOGIN_QQ}.json"
-    fi
     echo "  - llbot_config/webui_token.txt"
     echo "  - llbot_config/auth_token.txt"
     echo "  - docker-compose.yml"
