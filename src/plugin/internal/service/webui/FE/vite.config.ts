@@ -36,7 +36,7 @@ function pluginSharedShims(): Plugin {
       server.middlewares.use((req, res, next) => {
         const clean = (req.url ?? '').split('?')[0]
         const match = /(?:^|\/)(plugin-shared\/.+)$/.exec(clean)
-        const source = match && files.get(match[1])
+        const source = match ? files.get(match[1]) : undefined
         if (source === undefined) return next()
         res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
         res.end(source)
