@@ -146,8 +146,14 @@ async function onLoad() {
   try {
     await plugins
     // What --plugin-config says goes last, so it wins over a plugin's own flag or variable for the same field
-    const declared = startupLaunchSettings(pluginLaunchSources(ctx), process.argv, message => ctx.logger('startup-plugins').warn(message))
-    await startRequestedPlugins(ctx, requestedPlugins, undefined, [...declared, ...requestedConfigs])
+    const warn = (message: string) => ctx.logger('startup-plugins').warn(message)
+    const sources = pluginLaunchSources(ctx)
+    const declared = startupLaunchSettings(sources, process.argv, warn)
+    // A package --plugin installs now declares its settings only once it is there
+    const known = new Set(sources.map(source => source.target))
+    const installedLaunch = (packages: readonly string[]) => startupLaunchSettings(
+      pluginLaunchSources(ctx).filter(source => packages.includes(source.target) && !known.has(source.target)), process.argv, warn)
+    await startRequestedPlugins(ctx, requestedPlugins, undefined, [...declared, ...requestedConfigs], installedLaunch)
   } catch (error) {
     return startupFailed(error)
   }

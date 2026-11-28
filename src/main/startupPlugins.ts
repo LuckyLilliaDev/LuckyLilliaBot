@@ -433,6 +433,11 @@ export async function startRequestedPlugins(
   names: readonly string[],
   source?: RequestedInstaller,
   configs: readonly StartupPluginConfig[] = [],
+  /**
+   * The launch settings (`llbot.launch`) of packages installed just now, which were not there to read before: they go
+   * into the new entry before it is enabled, ahead of what `--plugin-config` says for it.
+   */
+  installedLaunch?: (packages: readonly string[]) => StartupPluginConfig[],
 ): Promise<void> {
   if (!names.length && !configs.length) return
   const logger = ctx.logger('startup-plugins')
@@ -493,9 +498,13 @@ export async function startRequestedPlugins(
     for (const requested of packageTargets) {
       try {
         const plan = await market.ensureRequested(requested)
+        const fromLaunch = new Map<string, ConfigPatch[]>()
+        for (const item of installedLaunch?.(plan.names.filter(name => !completed.has(name))) ?? []) {
+          if (!item.plugin.startsWith('builtin:')) fromLaunch.set(item.plugin, [...fromLaunch.get(item.plugin) ?? [], item.patch])
+        }
         for (const name of plan.names) {
           if (completed.has(name)) continue
-          const patches = packagePatches.get(name)
+          const patches = [...fromLaunch.get(name) ?? [], ...packagePatches.get(name) ?? []]
           const entries = ctx.plugins.list().filter(entry => entry.name === name || entry.packageName === name)
           if (!entries.length) {
             if (patches?.length) {

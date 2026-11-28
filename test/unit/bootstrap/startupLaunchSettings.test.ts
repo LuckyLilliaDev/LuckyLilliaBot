@@ -173,4 +173,56 @@ describe('applying launch settings at startup', () => {
     expect(entry(OB).config.connect).toEqual([{ type: 'http', enable: true, port: 3000 }, { type: 'ws', port: 3101, enable: true }])
     expect(entry(OB).disabled).toBeUndefined()
   })
+
+  it('applies the settings of a package --plugin installs on this start before it first starts', async () => {
+    const root = path.join(dir, 'plugins')
+    mkdirSync(root, { recursive: true })
+    const pluginsFile = path.join(dir, 'plugins.json')
+    writeFileSync(pluginsFile, JSON.stringify({ version: 1, entries: [] }))
+    ctx = new Context()
+    await ctx.plugin(TimerService)
+    await ctx.plugin(PluginService, { file: pluginsFile, dataDir: path.join(dir, 'plugin-data'), roots: [root], builtins: [], trust: true })
+
+    const started: unknown[] = []
+    ;(globalThis as Record<string, unknown>).__testNtStarts = started
+    const installer = {
+      ensureRequested: vi.fn(async (name: string) => {
+        const pkgDir = path.join(root, '@luckylillia-dev', 'plugin-nt-protocol')
+        mkdirSync(pkgDir, { recursive: true })
+        writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({
+          name: NT, version: '1.0.0', type: 'module', main: './index.js',
+          llbot: { launch: [{ field: 'mode', arg: '--ntqq-mode', env: 'NTQQ_MODE' }, { field: 'autoLoginUin', env: 'NTQQ_ACCOUNT' }] },
+        }))
+        writeFileSync(path.join(pkgDir, 'index.js'), `
+          import Schema from 'schemastery'
+          export const name = 'nt-protocol'
+          export const Config = Schema.object({
+            mode: Schema.union(['direct', 'native']).default('native'),
+            autoLoginUin: Schema.string().default(''),
+          })
+          export function apply(ctx, config) { globalThis.__testNtStarts.push(config) }
+        `)
+        await ctx!.plugins.scan()
+        return { names: [name], installed: [] }
+      }),
+    }
+    const argv = ['--plugin', NT, '--ntqq-mode=direct']
+    const env = { NTQQ_MODE: 'native', NTQQ_ACCOUNT: '10001' }
+    // As main.ts does it: nothing declares --ntqq-mode before the package is there
+    const sources = pluginLaunchSources(ctx)
+    expect(startupLaunchSettings(sources, argv, undefined, env)).toEqual([])
+    const known = new Set(sources.map(source => source.target))
+    try {
+      await startRequestedPlugins(ctx, [NT], installer, [], packages => startupLaunchSettings(
+        pluginLaunchSources(ctx!).filter(source => packages.includes(source.target) && !known.has(source.target)), argv, undefined, env))
+    } finally {
+      delete (globalThis as Record<string, unknown>).__testNtStarts
+    }
+
+    // Started once, already with the flag over the variable
+    expect(started).toEqual([{ mode: 'direct', autoLoginUin: '10001' }])
+    const saved = JSON.parse(readFileSync(pluginsFile, 'utf8')).entries.find((item: { name: string }) => item.name === NT)
+    expect(saved.config).toEqual({ mode: 'direct', autoLoginUin: '10001' })
+    expect(saved.disabled).toBeUndefined()
+  })
 })
