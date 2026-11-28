@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs'
 import * as nodeModule from 'node:module'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { builtinRuntimeModule } from './builtin-runtime'
 
 /** Packages a plugin must share with the host: a second copy of cordis breaks services and events. */
@@ -42,14 +45,19 @@ export function sharedSpecifierMap(): Map<string, string> {
 
 /**
  * Two jobs: pin shared packages to the host copy, and copy the `?v=` reload epoch from a plugin module
- * to the modules it imports inside the same package. Without the latter only the entry would be
- * re-evaluated on reload and every relative import would come back from the ESM cache.
+ * to the ES modules it imports inside the same package. Without the latter only the entry would be
+ * re-evaluated on reload and every relative import would come back from the ESM cache. CommonJS files keep
+ * their plain URL: imported with a query, Node evaluates them apart from require() and their exports come out
+ * wrong (a reload of the NTQQ plugin failed on `debug`, imported by an ES module in its node_modules). The host
+ * clears them from require.cache for a reload instead.
  */
 export function resolvePluginSpecifier(
   state: ResolverState,
   specifier: string,
   context: nodeModule.ResolveHookContext,
   nextResolve: (specifier: string, context?: Partial<nodeModule.ResolveHookContext>) => nodeModule.ResolveFnOutput,
+  /** Whether the nearest package.json of a directory (a file URL) says "type": "module"; tests pass their own. */
+  moduleType: (dirUrl: string) => boolean = isModulePackage,
 ): nodeModule.ResolveFnOutput {
   const internal = builtinRuntimeModule(specifier)
   if (internal) return { url: internal, shortCircuit: true }
@@ -61,7 +69,7 @@ export function resolvePluginSpecifier(
   const epoch = new URL(parent).searchParams.get('v')
   if (!epoch) return result
   const root = packageRootOf(state.roots, parent)
-  if (!root || !stripQuery(result.url).startsWith(root)) return result
+  if (!root || !stripQuery(result.url).startsWith(root) || isCommonJS(result.url, moduleType)) return result
   const url = new URL(result.url)
   url.searchParams.set('v', epoch)
   return { ...result, url: url.href }
@@ -84,6 +92,44 @@ function packageRootOf(roots: string[], url: string): string | undefined {
     if (bare.startsWith(root) && (!best || root.length > best.length)) best = root
   }
   return best
+}
+
+const packageTypes = new Map<string, boolean>()
+
+/**
+ * Whether the nearest package.json of a directory (a file URL) says "type": "module". Read once per directory:
+ * a reload does not change it.
+ */
+export function isModulePackage(dirUrl: string): boolean {
+  let dir: string
+  try {
+    dir = fileURLToPath(dirUrl)
+  } catch {
+    return false
+  }
+  return moduleIn(path.resolve(dir))
+}
+
+function moduleIn(dir: string): boolean {
+  const known = packageTypes.get(dir)
+  if (known !== undefined) return known
+  let module: boolean
+  try {
+    module = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).type === 'module'
+  } catch {
+    const parent = path.dirname(dir)
+    module = parent !== dir && moduleIn(parent)
+  }
+  packageTypes.set(dir, module)
+  return module
+}
+
+/** How Node decides it: .cjs, or .js without "type": "module" in the nearest package.json. */
+export function isCommonJS(url: string, moduleType: (dirUrl: string) => boolean): boolean {
+  const bare = stripQuery(url)
+  if (bare.endsWith('.cjs')) return true
+  if (!bare.endsWith('.js')) return false
+  return !moduleType(new URL('.', bare).href)
 }
 
 function stripQuery(url: string): string {
