@@ -1,3 +1,16 @@
+V9.0.3
+更新时间 2026-11-29
+
+* 插件可以在 package.json 的 llbot.launch 里声明启动参数和环境变量，启动时写入插件配置并启用插件，如 --ntqq-mode / NTQQ_MODE、--onebot-ws-port / ONEBOT_WS_PORT、--milky-port、--satori-port / SATORI_PORT；同时用 --plugin 安装的插件，第一次启动就生效
+* NTQQ 登录相关的参数改由 NTQQ 协议插件提供：--direct、--nativeqq、-q、--protocol、--cdn 换成 --ntqq-mode=native/direct、--ntqq-account、--ntqq-protocol、--ntqq-sign-cdn、--ntqq-qq-path，需要 NTQQ 协议插件 1.0.5
+* 本体不再用 -q 挑选同名实例，请改用 --instance
+* --plugin-config 的字段路径支持按类型选列表项，如 onebot11:connect[type=ws].port=3001
+* WebUI 登录密码改为各实例共用（data/webui_token.txt），升级时自动沿用原来的密码；插件的共享数据目录也改为各实例共用
+* Docker：启动参数原样交给本体，登录方式改用 NTQQ_MODE、NTQQ_ACCOUNT 等环境变量，旧的 PROTOCOL_MODE、AUTO_LOGIN_QQ、PROTOCOL、CDN 仍然有效
+* Docker 安装脚本按所选协议安装 NTQQ 协议、OneBot 11、Milky 插件，配置写进 compose 的环境变量
+* 发布包里的 start.sh 改用 CLI 发布页的版本，去掉使用说明文件
+
+=================
 V9.0.2
 更新时间 2026-11-24
 
