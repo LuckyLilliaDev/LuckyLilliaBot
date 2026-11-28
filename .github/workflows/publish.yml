@@ -73,7 +73,7 @@ jobs:
           mkdir -p bin/llbot
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* bin/llbot/
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-win-x64.exe -O LuckyLillia.exe
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/LuckyLillia-win-x64.exe -O LuckyLillia.exe
           zip -r ../LuckyLillia-CLI-win-x64.zip ./*
 
       - name: Compress for Windows Desktop
@@ -84,7 +84,7 @@ jobs:
           mkdir -p bin/llbot
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/LuckyLilliaDesktop.Avalonia/releases/latest/download/lucky-lillia-desktop-win-x64.zip
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.Desktop/releases/latest/download/lucky-lillia-desktop-win-x64.zip
           unzip lucky-lillia-desktop-win-x64.zip
           rm lucky-lillia-desktop-win-x64.zip
           mv lucky-lillia-desktop.exe LuckyLillia.exe
@@ -98,9 +98,9 @@ jobs:
           mkdir -p bin/llbot
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-linux-x64 -O LuckyLillia
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/LuckyLillia-linux-x64 -O LuckyLillia
           chmod +x LuckyLillia
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/start-linux.sh -O start.sh
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/start-linux.sh -O start.sh
           chmod +x start.sh
           zip -r ../LuckyLillia-CLI-linux-x64.zip ./*
           # start.sh and the launcher must stay executable once unpacked
@@ -114,9 +114,9 @@ jobs:
           mkdir -p bin/llbot
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-linux-arm64 -O LuckyLillia
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/LuckyLillia-linux-arm64 -O LuckyLillia
           chmod +x LuckyLillia
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/start-linux.sh -O start.sh
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/start-linux.sh -O start.sh
           chmod +x start.sh
           zip -r ../LuckyLillia-CLI-linux-arm64.zip ./*
           # start.sh and the launcher must stay executable once unpacked
@@ -128,11 +128,11 @@ jobs:
           mkdir luckylillia-cli-macos-arm64
           cd luckylillia-cli-macos-arm64
           mkdir -p bin/llbot
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/start-mac.sh -O start.sh
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/start-mac.sh -O start.sh
           chmod +x start.sh
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/LuckyLillia.CLI/releases/latest/download/LuckyLillia-macos-arm64 -O LuckyLillia
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.CLI/releases/latest/download/LuckyLillia-macos-arm64 -O LuckyLillia
           chmod +x LuckyLillia
           tar -cJvf ../LuckyLillia-CLI-macos-arm64.tar.xz ./*
           # start.sh (removes the quarantine flag) and the launcher must stay executable once unpacked
@@ -146,7 +146,7 @@ jobs:
           mkdir -p bin/llbot
           cp ../dist/更新日志.txt ./
           cp -r ../dist/* ./bin/llbot/
-          wget https://github.com/LLOneBot/LuckyLilliaDesktop.Avalonia/releases/latest/download/lucky-lillia-desktop-macos-arm64.tar.gz
+          wget https://github.com/LuckyLilliaDev/LuckyLillia.Desktop/releases/latest/download/lucky-lillia-desktop-macos-arm64.tar.gz
           tar -xzvf lucky-lillia-desktop-macos-arm64.tar.gz
           rm lucky-lillia-desktop-macos-arm64.tar.gz
           tar -cJvf ../LuckyLillia-Desktop-macos-arm64.tar.xz ./*
